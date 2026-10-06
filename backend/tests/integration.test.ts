@@ -130,36 +130,31 @@ describe('Integration Tests - Enrollment & Payment Endpoints', () => {
   });
 
   describe('Standard Razorpay Endpoints (/api/create-order & /api/verify-payment)', () => {
-    it('POST /api/create-order should return 400 if amount is missing or < 100 paise', async () => {
-      const resMissing = await request(app)
-        .post('/api/create-order')
-        .send({});
-      expect(resMissing.status).toBe(400);
-      expect(resMissing.body.error).toBe('Validation failed');
-
-      const resTooLow = await request(app)
-        .post('/api/create-order')
-        .send({ amount: 99 });
-      expect(resTooLow.status).toBe(400);
-      expect(resTooLow.body.error).toBe('Validation failed');
-    });
-
-    it('POST /api/create-order should successfully create order with >= 100 paise', async () => {
+    it('POST /api/create-order should ignore input amount and use COURSE_PRICE_PAISE', async () => {
       vi.spyOn(razorpayService, 'createStandardOrder').mockResolvedValueOnce({
         id: 'order_std_123',
-        amount: 50000,
+        amount: env.COURSE_PRICE_PAISE,
         currency: 'INR',
       } as any);
 
-      const res = await request(app)
+      const resMissing = await request(app)
         .post('/api/create-order')
-        .send({ amount: 50000, currency: 'INR' });
+        .send({});
+      
+      expect(resMissing.status).toBe(200);
+      expect(resMissing.body.amount).toBe(env.COURSE_PRICE_PAISE);
 
-      expect(res.status).toBe(200);
-      expect(res.body.order_id).toBe('order_std_123');
-      expect(res.body.amount).toBe(50000);
-      expect(res.body.currency).toBe('INR');
-      expect(res.body.key_id).toBe(env.RAZORPAY_KEY_ID);
+      vi.spyOn(razorpayService, 'createStandardOrder').mockResolvedValueOnce({
+        id: 'order_std_124',
+        amount: env.COURSE_PRICE_PAISE,
+        currency: 'INR',
+      } as any);
+
+      const resTampered = await request(app)
+        .post('/api/create-order')
+        .send({ amount: 100 });
+      expect(resTampered.status).toBe(200);
+      expect(resTampered.body.amount).toBe(env.COURSE_PRICE_PAISE);
     });
 
     it('POST /api/create-order should return 401 when Razorpay auth fails', async () => {

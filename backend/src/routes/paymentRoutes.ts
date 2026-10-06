@@ -16,21 +16,7 @@ export const paymentRouter = Router();
  */
 paymentRouter.post('/create-order', orderLimiter, async (req: Request, res: Response) => {
   try {
-    const rawAmount = req.body?.amount;
-    if (rawAmount === undefined || rawAmount === null || rawAmount === '') {
-      return res.status(400).json({
-        error: 'Validation failed',
-        message: 'Amount is required and must be in paise (minimum 100 paise)',
-      });
-    }
-
-    const amount = Number(rawAmount);
-    if (isNaN(amount) || !Number.isInteger(amount) || amount < 100) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        message: 'Amount must be an integer >= 100 paise',
-      });
-    }
+    const amount = env.COURSE_PRICE_PAISE;
 
     const currency = (req.body.currency || 'INR').toUpperCase();
     const receipt = req.body.receipt || `rcpt_${Date.now()}`;
