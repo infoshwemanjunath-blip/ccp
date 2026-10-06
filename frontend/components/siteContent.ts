@@ -81,7 +81,7 @@ export const siteContent: SiteContent = {
     originalPrice: "₹9,999",
     currentPrice: "₹3,499",
   },
-  youtubeUrl: "",
+  youtubeUrl: "https://youtu.be/7YzDPbLp2Rk?si=8hgVhuK87bZr3eKF",
   logo: "/client-logo.png",
   results: {
     eyebrow: "PROVEN RESULTS",

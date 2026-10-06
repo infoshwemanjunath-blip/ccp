@@ -4,17 +4,37 @@ import React, { useState } from "react";
 import Image from "next/image";
 
 interface VideoSectionProps {
-  youtubeUrl: string;
+  youtubeUrl?: string;
   brandName?: string;
 }
 
 export default function VideoSection({
-  youtubeUrl,
+  youtubeUrl = "https://youtu.be/7YzDPbLp2Rk?si=8hgVhuK87bZr3eKF",
   brandName = "Super Profit Business",
 }: VideoSectionProps) {
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const videoId = youtubeUrl.split("/embed/")[1]?.split("?")[0];
+  const getVideoId = (url: string) => {
+    if (!url) return "7YzDPbLp2Rk";
+    try {
+      if (url.includes("embed/")) {
+        return url.split("embed/")[1]?.split("?")[0] || "7YzDPbLp2Rk";
+      }
+      if (url.includes("youtu.be/")) {
+        return url.split("youtu.be/")[1]?.split("?")[0] || "7YzDPbLp2Rk";
+      }
+      if (url.includes("youtube.com/watch")) {
+        const u = new URL(url);
+        return u.searchParams.get("v") || "7YzDPbLp2Rk";
+      }
+      return "7YzDPbLp2Rk";
+    } catch {
+      return "7YzDPbLp2Rk";
+    }
+  };
+
+  const videoId = getVideoId(youtubeUrl);
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
 
   return (
     <section
@@ -25,7 +45,7 @@ export default function VideoSection({
         <div className="relative aspect-video w-full rounded-2xl overflow-hidden shadow-video bg-deepGreen-950 border border-deepGreen-900/40">
           {isPlaying ? (
             <iframe
-              src={`${youtubeUrl}?autoplay=1&rel=0`}
+              src={embedUrl}
               title={`${brandName} Masterclass Overview`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               referrerPolicy="strict-origin-when-cross-origin"
@@ -36,34 +56,17 @@ export default function VideoSection({
             <button
               type="button"
               onClick={() => setIsPlaying(true)}
-              className="absolute inset-0 w-full h-full select-none group cursor-pointer"
+              className="absolute inset-0 w-full h-full select-none group cursor-pointer focus:outline-none"
               aria-label="Play video"
             >
-              {/* YouTube Thumbnail */}
+              {/* Uploaded UGC Business Poster */}
               <Image
-                src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
-                alt="How my life changed | My main source of Income | Kannada UGC MasterClass"
+                src="/how-to-build-high-revenue-ugc-business.png"
+                alt="How to Build a High Revenue UGC Business"
                 fill
                 priority
                 className="object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                unoptimized
               />
-
-              {/* Dark overlay */}
-              <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors duration-300" />
-
-              {/* Play Button */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/95 shadow-xl transition-transform duration-300 group-hover:scale-110">
-                  <svg
-                    className="w-7 h-7 sm:w-9 sm:h-9 ml-1 text-deepGreen-950"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                </div>
-              </div>
             </button>
           )}
         </div>
