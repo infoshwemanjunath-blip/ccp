@@ -4,16 +4,17 @@ import React, { useState } from "react";
 import Image from "next/image";
 
 interface VideoSectionProps {
+  youtubeUrl: string;
   brandName?: string;
 }
 
 export default function VideoSection({
+  youtubeUrl,
   brandName = "Super Profit Business",
 }: VideoSectionProps) {
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const youtubeUrl =
-    "https://www.youtube.com/embed/7YzDPbLp2Rk";
+  const videoId = youtubeUrl.split("/embed/")[1]?.split("?")[0];
 
   return (
     <section
@@ -40,7 +41,7 @@ export default function VideoSection({
             >
               {/* YouTube Thumbnail */}
               <Image
-                src="https://img.youtube.com/vi/7YzDPbLp2Rk/maxresdefault.jpg"
+                src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
                 alt="How my life changed | My main source of Income | Kannada UGC MasterClass"
                 fill
                 priority
