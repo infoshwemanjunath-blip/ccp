@@ -44,7 +44,8 @@ export class RetryWorker {
          JOIN leads l ON ce.lead_id = l.id
          WHERE j.status = 'PENDING' AND j.next_run_at <= NOW()
          ORDER BY j.next_run_at ASC
-         LIMIT 10`
+         LIMIT 10
+         FOR UPDATE SKIP LOCKED`
       );
 
       for (const job of jobsRes.rows) {
