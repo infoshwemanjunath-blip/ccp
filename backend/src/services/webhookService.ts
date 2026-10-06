@@ -3,6 +3,7 @@ import { query, withTransaction } from '../db/pool.js';
 import { razorpayService } from './razorpayService.js';
 import { enrollmentWorkflowService } from './enrollmentWorkflowService.js';
 import { logger } from '../utils/logger.js';
+import { env } from '../config/env.js';
 
 export class WebhookService {
   /**
