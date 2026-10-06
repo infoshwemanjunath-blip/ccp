@@ -81,7 +81,13 @@ export class WebhookService {
             ? new Date(orderEntity.paid_at * 1000)
             : new Date();
 
+          const expectedAmount = env.COURSE_PRICE_PAISE;
+
           if (orderId) {
+            if (orderEntity?.amount && orderEntity.amount !== expectedAmount) {
+              logger.error('Webhook amount mismatch', { orderId, expectedAmount, actualAmount: orderEntity.amount });
+              throw new Error('Amount mismatch');
+            }
             await enrollmentWorkflowService.handlePaymentSuccess(orderId, paymentId, paidAt);
           }
           break;
@@ -95,7 +101,13 @@ export class WebhookService {
             ? new Date(paymentEntity.created_at * 1000)
             : new Date();
 
+          const expectedAmount = env.COURSE_PRICE_PAISE;
+
           if (orderId && paymentId) {
+            if (paymentEntity?.amount && paymentEntity.amount !== expectedAmount) {
+              logger.error('Webhook amount mismatch', { orderId, expectedAmount, actualAmount: paymentEntity.amount });
+              throw new Error('Amount mismatch');
+            }
             await enrollmentWorkflowService.handlePaymentSuccess(orderId, paymentId, paidAt);
           }
           break;
@@ -107,7 +119,7 @@ export class WebhookService {
 
           if (orderId) {
             await query(
-              `UPDATE payments SET status = 'FAILED', updated_at = NOW() WHERE razorpay_order_id = $1`,
+              `UPDATE payments SET status = 'FAILED', updated_at = NOW() WHERE razorpay_order_id = $1 AND status = 'PENDING'`,
               [orderId]
             );
             logger.info('Marked payment as FAILED from webhook', { orderId });
