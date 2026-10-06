@@ -1,0 +1,12 @@
+.vercel
+.env
+.env.*
+.env.local
+node_modules
+dist
+.next
+.agent
+.agents
+.gemini
+.gsd
+adapters
