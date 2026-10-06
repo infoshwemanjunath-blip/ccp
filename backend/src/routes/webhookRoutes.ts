@@ -16,8 +16,12 @@ webhookRouter.post('/razorpay', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Missing webhook signature header' });
   }
 
-  // Access the raw buffer captured by express.json({ verify })
-  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+  const rawBody = (req as any).rawBody;
+  
+  if (!rawBody) {
+    logger.error('Missing rawBody in webhook request');
+    return res.status(400).json({ error: 'Missing raw payload' });
+  }
 
   try {
     const result = await webhookService.handleWebhook(
