@@ -115,8 +115,12 @@ export default function RazorpayCheckoutButton({
       const orderId = orderData.order_id || orderData.id;
       const keyId =
         orderData.key_id ||
-        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
-        "rzp_test_TkW68mJxwEl3WB";
+        orderData.keyId ||
+        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+
+      if (!keyId) {
+        throw new Error("Payment gateway key unavailable.");
+      }
 
       // 3. Configure Razorpay modal options
       const options = {

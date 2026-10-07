@@ -321,11 +321,19 @@ export default function EnrollmentModal() {
       setModalState("CHECKOUT_OPEN");
 
       // Step 2: Open Razorpay Checkout Modal
+      const gatewayKey =
+        orderData.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+
+      if (!gatewayKey) {
+        setModalState("FORM");
+        setStatusMessage(
+          "Payment gateway key unavailable. Please contact support."
+        );
+        return;
+      }
+
       const options = {
-        key:
-          orderData.keyId ||
-          process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
-          "rzp_test_TkW68mJxwEl3WB",
+        key: gatewayKey,
         amount: orderData.amount,
         currency: orderData.currency,
         name: "Super Profit",
