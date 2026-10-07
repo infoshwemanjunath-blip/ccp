@@ -1,11 +1,11 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import EnrollmentModal, { openEnrollmentModal } from '../components/EnrollmentModal';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('EnrollmentModal', () => {
   beforeEach(() => {
-    // Clear any previous state
     vi.clearAllMocks();
+    window.location.hash = "";
   });
 
   it('does not render when closed', () => {
@@ -14,19 +14,42 @@ describe('EnrollmentModal', () => {
     expect(heading).not.toBeInTheDocument();
   });
 
-  it('renders correctly when open event is dispatched', () => {
+  it('renders correctly when open event is dispatched', async () => {
     render(<EnrollmentModal />);
-    openEnrollmentModal();
-    const heading = screen.getByText(/Join Super Profit Masterclass/i);
+    act(() => {
+      openEnrollmentModal();
+    });
+    const heading = await screen.findByText(/Join Super Profit Masterclass/i);
     expect(heading).toBeInTheDocument();
+  });
+
+  it('closes when Back button is clicked', async () => {
+    render(<EnrollmentModal />);
+    act(() => {
+      openEnrollmentModal();
+    });
+    const backButton = await screen.findByRole('button', { name: /Back to overview/i });
+    expect(backButton).toBeInTheDocument();
+    
+    act(() => {
+      fireEvent.click(backButton);
+    });
+
+    const heading = screen.queryByText(/Join Super Profit Masterclass/i);
+    expect(heading).not.toBeInTheDocument();
   });
 
   it('validates required fields on submit', async () => {
     render(<EnrollmentModal />);
-    openEnrollmentModal();
+    act(() => {
+      openEnrollmentModal();
+    });
     
-    const submitButton = screen.getByRole('button', { name: /Proceed to Secure Pay/i });
-    fireEvent.click(submitButton);
+    const submitButton = await screen.findByRole('button', { name: /Proceed to Secure Pay/i });
+    const form = submitButton.closest('form')!;
+    act(() => {
+      fireEvent.submit(form);
+    });
 
     const nameError = await screen.findByText(/Full Name must be at least 2 characters/i);
     expect(nameError).toBeInTheDocument();

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   X,
   Lock,
@@ -12,6 +12,7 @@ import {
   User,
   Phone,
   ArrowRight,
+  ArrowLeft,
   ExternalLink,
 } from "lucide-react";
 
@@ -51,22 +52,40 @@ export default function EnrollmentModal() {
     email?: string;
   }>({});
   const [statusMessage, setStatusMessage] = useState("");
-  const [orderId, setOrderId] = useState<string | null>(null);
+  const [, setOrderId] = useState<string | null>(null);
 
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
+    if (typeof window !== "undefined") {
+      if (window.history.state?.modal === "enrollment") {
+        window.history.back();
+      } else if (window.location.hash === "#enroll") {
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + window.location.search
+        );
+      }
+    }
+  }, []);
+
+  const handleOpen = useCallback(() => {
+    setIsOpen(true);
+    setModalState("FORM");
+    setStatusMessage("");
+    if (typeof window !== "undefined" && window.location.hash !== "#enroll") {
+      window.history.pushState({ modal: "enrollment" }, "", "#enroll");
+    }
+  }, []);
+
   // Listen to open triggers from CTA buttons or links
   useEffect(() => {
-    function handleOpen() {
-      setIsOpen(true);
-      setModalState("FORM");
-      setStatusMessage("");
-    }
-
     function handleLinkClick(e: MouseEvent) {
       const target = (e.target as HTMLElement).closest(
-        'a[href="#join"], [data-enroll-btn]'
+        'a[href="#join"], a[href="#enroll"], [data-enroll-btn]'
       );
       if (target) {
         e.preventDefault();
@@ -77,11 +96,39 @@ export default function EnrollmentModal() {
     window.addEventListener("open-enrollment-modal", handleOpen);
     document.addEventListener("click", handleLinkClick);
 
+    // If loaded with #enroll in URL, open modal
+    if (typeof window !== "undefined" && window.location.hash === "#enroll") {
+      setIsOpen(true);
+    }
+
     return () => {
       window.removeEventListener("open-enrollment-modal", handleOpen);
       document.removeEventListener("click", handleLinkClick);
     };
-  }, []);
+  }, [handleOpen]);
+
+  // Handle browser back button (popstate) and Escape key
+  useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window !== "undefined" && window.location.hash !== "#enroll") {
+        setIsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleClose();
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleClose]);
 
   // Prevent background scrolling when modal is open
   useEffect(() => {
@@ -360,19 +407,43 @@ export default function EnrollmentModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-deepGreen-950/60 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-lg bg-cream-50 border border-peach-200 rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-8">
-        {/* Close Button */}
-        <button
-          onClick={() => setIsOpen(false)}
-          className="absolute top-5 right-5 p-2 text-brandText-muted hover:text-deepGreen-950 rounded-full hover:bg-cream-200 transition-colors"
-          aria-label="Close modal"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-16 pb-8 px-3 sm:p-4 bg-deepGreen-950/75 backdrop-blur-sm overflow-y-auto animate-fade-in"
+    >
+      <div className="relative w-full max-w-lg my-auto max-h-[85vh] sm:max-h-[90vh] overflow-y-auto bg-cream-50 border border-peach-200 rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-8">
+        {/* Sticky Top Navigation Header with Back and Close options */}
+        <div className="sticky -top-5 sm:-top-8 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-4 pb-3 mb-4 bg-cream-50/95 backdrop-blur-md z-30 flex items-center justify-between border-b border-peach-200 shadow-sm">
+          <button
+            id="modal-back-btn"
+            type="button"
+            onClick={handleClose}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-deepGreen-950 bg-peach-200 hover:bg-peach-300 border border-peach-300 transition-all shadow-sm cursor-pointer active:scale-95"
+            aria-label="Back to overview"
+          >
+            <ArrowLeft className="w-4 h-4 text-deepGreen-950" />
+            <span>Back</span>
+          </button>
+
+          <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-deepGreen-900 bg-peach-100/80 px-2.5 py-1 rounded-full border border-peach-200">
+            Secure Checkout
+          </span>
+
+          <button
+            id="modal-close-x-btn"
+            type="button"
+            onClick={handleClose}
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-deepGreen-950 bg-peach-200 hover:bg-peach-300 border border-peach-300 transition-all shadow-sm cursor-pointer active:scale-95"
+            aria-label="Close modal"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* Modal Header */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-5">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-peach-100 text-deepGreen-900 text-xs font-semibold uppercase tracking-wider mb-2 border border-peach-300">
             <ShieldCheck className="w-3.5 h-3.5 text-deepGreen-800" />
             Official Course Enrollment
@@ -407,7 +478,7 @@ export default function EnrollmentModal() {
 
         {/* State: FORM */}
         {(modalState === "FORM" || modalState === "CREATING_ORDER") && (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             {/* Full Name */}
             <div>
               <label className="block text-xs font-semibold text-deepGreen-900 uppercase tracking-wide mb-1.5">
@@ -515,6 +586,18 @@ export default function EnrollmentModal() {
               </button>
             </div>
 
+            {/* Cancel & Return Option */}
+            <div className="text-center pt-1">
+              <button
+                id="modal-cancel-link-btn"
+                type="button"
+                onClick={handleClose}
+                className="text-xs text-brandText-muted hover:text-deepGreen-950 font-medium underline py-1 cursor-pointer transition-colors"
+              >
+                ← Cancel & Return to Course Overview
+              </button>
+            </div>
+
             <div className="flex items-center justify-center gap-4 pt-1 text-[11px] text-brandText-muted">
               <span className="flex items-center gap-1">
                 <Lock className="w-3 h-3 text-luxuryGold-500" /> 256-bit SSL
@@ -588,7 +671,8 @@ export default function EnrollmentModal() {
             </div>
 
             <button
-              onClick={() => setIsOpen(false)}
+              id="modal-success-done-btn"
+              onClick={handleClose}
               className="w-full py-3.5 px-6 rounded-full bg-deepGreen-950 text-white font-semibold text-sm shadow-md hover:bg-deepGreen-900 transition-colors"
             >
               Done
@@ -609,14 +693,23 @@ export default function EnrollmentModal() {
               This Google account (<strong>{formData.email}</strong>) already
               holds active access to the Super Profit Classroom.
             </p>
-            <a
-              href="https://classroom.google.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 w-full py-3.5 px-6 rounded-full bg-deepGreen-950 text-white font-semibold text-sm shadow-md hover:bg-deepGreen-900 transition-colors"
-            >
-              Open Google Classroom <ExternalLink className="w-4 h-4" />
-            </a>
+            <div className="space-y-2 pt-2">
+              <a
+                href="https://classroom.google.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 w-full py-3.5 px-6 rounded-full bg-deepGreen-950 text-white font-semibold text-sm shadow-md hover:bg-deepGreen-900 transition-colors"
+              >
+                Open Google Classroom <ExternalLink className="w-4 h-4" />
+              </a>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="w-full py-2.5 text-xs font-semibold text-deepGreen-900 hover:underline"
+              >
+                ← Back to Overview
+              </button>
+            </div>
           </div>
         )}
       </div>
