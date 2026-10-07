@@ -17,8 +17,16 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 // CORS Configuration
+const configuredOrigins = env.FRONTEND_URL
+  ? env.FRONTEND_URL.split(',').map((u) => u.trim().replace(/\/$/, ''))
+  : [];
+
 const allowedOrigins = [
-  env.FRONTEND_URL,
+  ...configuredOrigins,
+  'https://superprofit.in',
+  'https://www.superprofit.in',
+  'http://superprofit.in',
+  'http://www.superprofit.in',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ].filter(Boolean);
@@ -28,8 +36,12 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, curl, server-to-server)
       if (!origin) return callback(null, true);
+
+      const cleanOrigin = origin.replace(/\/$/, '');
       if (
-        allowedOrigins.includes(origin) ||
+        allowedOrigins.includes(cleanOrigin) ||
+        cleanOrigin.endsWith('.vercel.app') ||
+        cleanOrigin.includes('superprofit.in') ||
         env.NODE_ENV === 'development'
       ) {
         return callback(null, true);
