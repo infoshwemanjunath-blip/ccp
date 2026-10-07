@@ -10,3 +10,4 @@ dist
 .gemini
 .gsd
 adapters
+*.tsbuildinfo
