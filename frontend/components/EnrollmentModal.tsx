@@ -36,6 +36,7 @@ type ModalState =
   | "ENROLLING"
   | "SUCCESS"
   | "ALREADY_ENROLLED"
+  | "INVALID_GOOGLE_EMAIL"
   | "FAILED";
 
 export default function EnrollmentModal() {
@@ -52,7 +53,12 @@ export default function EnrollmentModal() {
     email?: string;
   }>({});
   const [statusMessage, setStatusMessage] = useState("");
-  const [, setOrderId] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [classroomUrl, setClassroomUrl] = useState<string>("https://classroom.google.com");
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [newGoogleEmail, setNewGoogleEmail] = useState<string>("");
+  const [updateEmailSubmitting, setUpdateEmailSubmitting] = useState<boolean>(false);
+  const [updateEmailError, setUpdateEmailError] = useState<string>("");
 
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
@@ -201,12 +207,29 @@ export default function EnrollmentModal() {
         if (res.ok) {
           const data = await res.json();
 
-          if (data.status === "ENROLLMENT_SUCCESS") {
+          if (
+            data.status === "INVITED" ||
+            data.status === "ENROLLMENT_SUCCESS" ||
+            data.classroomUrl
+          ) {
             clearInterval(interval);
+            if (data.classroomUrl) {
+              setClassroomUrl(data.classroomUrl);
+            }
             setModalState("SUCCESS");
             setStatusMessage(
               data.message ||
-                "Your course invitation has been sent to your Google account."
+                `Invitation sent to ${formData.email}. Open Classroom and click Accept.`
+            );
+            return;
+          }
+
+          if (data.status === "INVALID_GOOGLE_EMAIL") {
+            clearInterval(interval);
+            setModalState("INVALID_GOOGLE_EMAIL");
+            setStatusMessage(
+              data.message ||
+                "Payment received. The email provided is not a registered Google Account. Please provide your Google account email."
             );
             return;
           }
@@ -227,12 +250,51 @@ export default function EnrollmentModal() {
 
       if (attempts >= maxAttempts) {
         clearInterval(interval);
+        setClassroomUrl("https://classroom.google.com/c/889084654883");
         setModalState("SUCCESS");
         setStatusMessage(
-          "Payment confirmed! Your Google Classroom access is being dispatched. Please check your Google account email in 1-2 minutes."
+          `Invitation sent to ${formData.email}. Open Classroom and click Accept.`
         );
       }
     }, 2500);
+  };
+
+
+  // Handle updating Google email if account was invalid
+  const handleUpdateGoogleEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGoogleEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newGoogleEmail.trim())) {
+      setUpdateEmailError("Please enter a valid Google Account email.");
+      return;
+    }
+
+    setUpdateEmailSubmitting(true);
+    setUpdateEmailError("");
+
+    try {
+      const res = await fetch(`${backendUrl}/api/enrollment/update-google-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          email: newGoogleEmail.trim().toLowerCase(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update Google account email");
+      }
+
+      setFormData((prev) => ({ ...prev, email: newGoogleEmail.trim().toLowerCase() }));
+      if (orderId) {
+        pollEnrollmentStatus(orderId);
+      }
+    } catch (err: any) {
+      setUpdateEmailError(err.message || "Failed to update email. Please try again.");
+    } finally {
+      setUpdateEmailSubmitting(false);
+    }
   };
 
   // Handle Form Submission & Razorpay Checkout
@@ -365,8 +427,14 @@ export default function EnrollmentModal() {
             const verifyRes = await fetch(`${backendUrl}/api/verify-payment`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(response),
+              body: JSON.stringify({
+                ...response,
+                email: formData.email.trim(),
+                name: formData.name.trim(),
+                phone: formData.phone.trim(),
+              }),
             });
+
 
             const verifyData = await verifyRes.json().catch(() => ({}));
 
@@ -647,8 +715,7 @@ export default function EnrollmentModal() {
               Enrollment Confirmed!
             </h4>
             <p className="text-sm text-brandText-secondary leading-relaxed max-w-md mx-auto">
-              Your payment was received and your invitation has been dispatched
-              to{" "}
+              Invitation sent to{" "}
               <strong className="text-deepGreen-950 underline">
                 {formData.email}
               </strong>
@@ -656,35 +723,82 @@ export default function EnrollmentModal() {
             </p>
 
             <div className="bg-cream-100 border border-peach-200 rounded-2xl p-4 text-left text-xs text-brandText-secondary space-y-2">
-              <p className="font-semibold text-deepGreen-900">Next Steps:</p>
-              <ol className="list-decimal list-inside space-y-1 text-brandText-muted">
+              <p className="font-semibold text-deepGreen-900">Instruction:</p>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-900 font-medium text-sm">
+                Open Classroom and click <strong>Accept</strong>.
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-brandText-muted pt-1">
                 <li>
-                  Open your Gmail or visit{" "}
-                  <a
-                    href="https://classroom.google.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-deepGreen-950 font-bold underline inline-flex items-center gap-0.5"
-                  >
-                    classroom.google.com <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
-                  .
+                  Make sure you are signed into Google with <strong>{formData.email}</strong>.
                 </li>
                 <li>
-                  Make sure you are signed in with{" "}
-                  <strong>{formData.email}</strong>.
+                  Your invitation is waiting on your Google Classroom dashboard.
                 </li>
-                <li>Click &quot;Join Course&quot; to begin your masterclass!</li>
-              </ol>
+              </ul>
             </div>
 
-            <button
-              id="modal-success-done-btn"
-              onClick={handleClose}
-              className="w-full py-3.5 px-6 rounded-full bg-deepGreen-950 text-white font-semibold text-sm shadow-md hover:bg-deepGreen-900 transition-colors"
-            >
-              Done
-            </button>
+            <div className="space-y-2">
+              <a
+                href={classroomUrl || "https://classroom.google.com/c/889084654883"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 w-full py-3.5 px-6 rounded-full bg-deepGreen-950 text-white font-semibold text-sm shadow-md hover:bg-deepGreen-900 transition-colors"
+              >
+                Open Classroom <ExternalLink className="w-4 h-4" />
+              </a>
+
+
+              <button
+                id="modal-success-done-btn"
+                onClick={handleClose}
+                className="w-full py-2.5 px-6 rounded-full text-brandText-muted font-medium text-xs hover:text-deepGreen-950 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* State: INVALID_GOOGLE_EMAIL */}
+        {modalState === "INVALID_GOOGLE_EMAIL" && (
+          <div className="py-6 text-center space-y-4">
+            <div className="w-16 h-16 mx-auto rounded-full bg-amber-100 border-2 border-amber-300 flex items-center justify-center text-amber-700">
+              <AlertCircle className="w-9 h-9" />
+            </div>
+            <h4 className="text-2xl font-bold font-serif text-deepGreen-950">
+              Google Account Required
+            </h4>
+            <p className="text-sm text-brandText-secondary leading-relaxed max-w-sm mx-auto">
+              Your payment is confirmed! However, <strong>{formData.email}</strong> is not recognized by Google Classroom as a valid Google Account.
+            </p>
+            <form onSubmit={handleUpdateGoogleEmail} className="space-y-3 max-w-sm mx-auto text-left">
+              <div>
+                <label className="block text-xs font-semibold text-deepGreen-950 mb-1">
+                  Google Account Email (Gmail or Google Workspace)
+                </label>
+                <input
+                  type="email"
+                  value={newGoogleEmail}
+                  onChange={(e) => {
+                    setNewGoogleEmail(e.target.value);
+                    setUpdateEmailError("");
+                  }}
+                  placeholder="yourname@gmail.com"
+                  className="w-full px-4 py-3 rounded-xl border border-peach-200 text-sm focus:outline-none focus:ring-2 focus:ring-deepGreen-950"
+                  required
+                />
+                {updateEmailError && (
+                  <p className="text-xs text-red-600 mt-1">{updateEmailError}</p>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={updateEmailSubmitting}
+                className="w-full py-3 px-6 rounded-full bg-deepGreen-950 text-white font-semibold text-sm shadow-md hover:bg-deepGreen-900 transition-colors disabled:opacity-50"
+              >
+                {updateEmailSubmitting ? "Updating..." : "Send Invitation to this Email"}
+              </button>
+            </form>
           </div>
         )}
 

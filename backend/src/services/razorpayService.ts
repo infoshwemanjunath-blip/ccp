@@ -38,6 +38,15 @@ export class RazorpayService {
   }
 
   /**
+   * Fetch order from Razorpay to read metadata/notes
+   */
+  async fetchOrder(orderId: string): Promise<any> {
+    const client = this.getClient();
+    return client.orders.fetch(orderId);
+  }
+
+
+  /**
    * Create Razorpay order server-side and record in payments table
    */
   async createOrder(lead: LeadRecord): Promise<CheckoutOrderResponse> {

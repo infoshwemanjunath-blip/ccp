@@ -104,11 +104,21 @@ paymentRouter.post('/verify-payment', verifyLimiter, async (req: Request, res: R
       paymentId: payment_id,
     });
 
+    const email = req.body?.email || req.body?.notes?.email;
+    const name = req.body?.name || req.body?.notes?.name;
+
     try {
-      await enrollmentWorkflowService.handlePaymentSuccess(order_id, payment_id);
-    } catch {
-      // Non-blocking for generic checkout
+      await enrollmentWorkflowService.handlePaymentSuccess(
+        order_id,
+        payment_id,
+        new Date(),
+        email,
+        name
+      );
+    } catch (err) {
+      logger.error('Failed to process payment success enrollment', err);
     }
+
 
     return res.status(200).json({
       verified: true,

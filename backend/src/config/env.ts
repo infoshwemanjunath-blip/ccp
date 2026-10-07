@@ -26,6 +26,23 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().default(''),
   GOOGLE_REFRESH_TOKEN: z.string().default(''),
   GOOGLE_CLASSROOM_COURSE_ID: z.string().default(''),
+  GOOGLE_CLASSROOM_ENROLLMENT_CODE: z.string().default('u5d3zmob'),
+  GOOGLE_REDIRECT_URI: z.string().default('http://localhost:5000/api/enrollment/google-callback'),
+
+  // Feature Flags
+  AUTO_CLASSROOM_ENROLLMENT_ENABLED: z
+    .preprocess((val) => (val === undefined ? true : val === 'true' || val === true), z.boolean())
+    .default(true),
+
+  // Email Configuration (SMTP)
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_SECURE: z
+    .preprocess((val) => (val === undefined ? false : val === 'true' || val === true), z.boolean())
+    .default(false),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  EMAIL_FROM: z.string().default('Super Profit <support@superprofit.app>'),
 });
 
 const parsed = envSchema.safeParse(process.env);

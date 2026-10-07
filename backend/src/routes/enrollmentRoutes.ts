@@ -1,9 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { createOrderSchema } from '../utils/validation.js';
+import { createOrderSchema, updateGoogleEmailSchema } from '../utils/validation.js';
 import { leadService } from '../services/leadService.js';
 import { razorpayService } from '../services/razorpayService.js';
+import { enrollmentWorkflowService } from '../services/enrollmentWorkflowService.js';
+import { googleClassroomService } from '../services/googleClassroomService.js';
 import { orderLimiter } from '../middleware/rateLimiter.js';
 import { logger } from '../utils/logger.js';
+import { env } from '../config/env.js';
+import { query } from '../db/pool.js';
 
 export const enrollmentRouter = Router();
 
@@ -125,3 +129,55 @@ enrollmentRouter.get('/status/:orderId', async (req: Request, res: Response) => 
     });
   }
 });
+
+/**
+ * POST /api/enrollment/update-google-email
+ * Allows a paid user with an invalid/non-Google email to update their Google email address
+ */
+enrollmentRouter.post('/update-google-email', async (req: Request, res: Response) => {
+  try {
+    const parseResult = updateGoogleEmailSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: parseResult.error.flatten().fieldErrors,
+      });
+    }
+
+    const { orderId, email } = parseResult.data;
+    const updatedLead = await leadService.updateGoogleEmail(orderId, email);
+
+    // Re-trigger enrollment workflow with updated Google email
+    await enrollmentWorkflowService.executeEnrollment(updatedLead);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Google email updated. Classroom invitation dispatched.',
+    });
+  } catch (error: any) {
+    logger.error('Failed to update Google email', error);
+    return res.status(400).json({
+      error: error.message || 'Failed to update Google account email',
+    });
+  }
+});
+
+/**
+ * GET /api/enrollment/google-auth
+ * Redirects student directly to Google Classroom course page
+ */
+enrollmentRouter.get('/google-auth', async (req: Request, res: Response) => {
+  const courseId = env.GOOGLE_CLASSROOM_COURSE_ID;
+  return res.redirect(`https://classroom.google.com/c/${courseId}`);
+});
+
+/**
+ * GET /api/enrollment/google-callback
+ * Redirects student directly to Google Classroom course page
+ */
+enrollmentRouter.get('/google-callback', async (req: Request, res: Response) => {
+  const courseId = env.GOOGLE_CLASSROOM_COURSE_ID;
+  return res.redirect(`https://classroom.google.com/c/${courseId}`);
+});
+
+

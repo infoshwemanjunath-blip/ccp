@@ -138,6 +138,29 @@ CREATE TABLE IF NOT EXISTS enrollment_jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_status_next_run ON enrollment_jobs(status, next_run_at);
 
 -- ------------------------------------------------------------------------------
+-- 7. ENROLLMENTS TABLE (Authoritative payment-to-classroom mapping)
+-- Tracks student enrollment by payment_id with status PAID, INVITED, ENROLLED, FAILED
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS enrollments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_id VARCHAR(100) NOT NULL UNIQUE,
+    user_id UUID REFERENCES leads(id) ON DELETE SET NULL,
+    email VARCHAR(255) NOT NULL,
+    course_id VARCHAR(100) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'PAID'
+        CHECK (status IN ('PAID', 'INVITED', 'ENROLLED', 'FAILED')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_enrollments_payment_id ON enrollments(payment_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_email ON enrollments(email);
+CREATE INDEX IF NOT EXISTS idx_enrollments_general_status ON enrollments(status);
+
+
+-- ------------------------------------------------------------------------------
 -- Auto-update timestamps trigger function
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION update_timestamp_column()

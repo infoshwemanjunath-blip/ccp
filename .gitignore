@@ -11,3 +11,4 @@ dist
 .gsd
 adapters
 *.tsbuildinfo
+backend\.env.example

@@ -1,6 +1,8 @@
 export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
 export type EnrollmentStatus =
   | 'PENDING'
+  | 'PAID'
+  | 'INVITED'
   | 'ENROLLED'
   | 'FAILED'
   | 'REMOVAL_PENDING'
@@ -32,6 +34,19 @@ export interface PaymentRecord {
   status: PaymentStatus;
   signature?: string | null;
   paid_at?: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface EnrollmentRecord {
+  id: string;
+  payment_id: string;
+  user_id?: string | null;
+  email: string;
+  course_id: string;
+  status: 'PAID' | 'INVITED' | 'ENROLLED' | 'FAILED';
+  attempts: number;
+  last_error?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -74,10 +89,18 @@ export interface EnrollmentStatusResponse {
   status:
     | 'PAYMENT_PENDING'
     | 'PAYMENT_SUCCESS'
+    | 'PAYMENT_FAILED'
     | 'ENROLLMENT_PENDING'
+    | 'INVITED'
     | 'ENROLLMENT_SUCCESS'
     | 'ENROLLMENT_FAILED'
+    | 'INVALID_GOOGLE_EMAIL'
     | 'ALREADY_ENROLLED'
-    | 'REFUNDED';
+    | 'REFUNDED'
+    | 'NOT_FOUND';
   message: string;
+  classroomUrl?: string;
+  email?: string;
+  orderId?: string;
 }
+

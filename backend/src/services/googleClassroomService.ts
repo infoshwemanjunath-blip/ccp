@@ -5,12 +5,13 @@ import { logger } from '../utils/logger.js';
 
 export interface EnrollmentResult {
   success: boolean;
-  status: 'ENROLLED' | 'FAILED';
+  status: 'INVITED' | 'ENROLLED' | 'FAILED';
   googleUserId?: string;
   invitationId?: string;
   errorCode?: string;
   errorMessage?: string;
   isTransient?: boolean;
+  isInvalidEmail?: boolean;
 }
 
 export interface RemovalResult {
@@ -53,6 +54,26 @@ export class GoogleClassroomService {
   }
 
   /**
+   * Check if error indicates an invalid or non-Google email address
+   */
+  isInvalidEmailError(error: any): boolean {
+    const msg = (
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      ''
+    ).toLowerCase();
+
+    return (
+      msg.includes('not a google account') ||
+      msg.includes('invalid email') ||
+      msg.includes('user not found') ||
+      msg.includes('cannot invite') ||
+      msg.includes('user cannot be invited') ||
+      msg.includes('unknown user')
+    );
+  }
+
+  /**
    * Invite student to private Google Classroom course using normalized paid email
    */
   async enrollStudent(
@@ -66,6 +87,7 @@ export class GoogleClassroomService {
       logger.info('Starting Google Classroom enrollment attempt', {
         leadId,
         email: emailNormalized,
+        courseId,
       });
 
       // 1. Check if already a student in the course
@@ -82,7 +104,7 @@ export class GoogleClassroomService {
           });
           return {
             success: true,
-            status: 'ENROLLED',
+            status: 'INVITED',
             googleUserId: studentCheck.data.userId,
           };
         }
@@ -113,19 +135,18 @@ export class GoogleClassroomService {
           });
           return {
             success: true,
-            status: 'ENROLLED',
+            status: 'INVITED',
             googleUserId: existingInvite.userId || undefined,
             invitationId: existingInvite.id || undefined,
           };
         }
       } catch (inviteListErr: any) {
-        // Continue if listing invites fails with non-fatal status
         logger.warn('Error listing existing invitations', {
           error: inviteListErr?.message,
         });
       }
 
-      // 3. Create student invitation (Google handles delivery to the student)
+      // 3. Create student invitation (Classroom API invitations.create)
       const invitation = await client.invitations.create({
         requestBody: {
           userId: emailNormalized,
@@ -142,15 +163,37 @@ export class GoogleClassroomService {
 
       return {
         success: true,
-        status: 'ENROLLED',
+        status: 'INVITED',
         googleUserId: invitation.data.userId || undefined,
         invitationId: invitation.data.id || undefined,
       };
     } catch (err: any) {
-      const isTransient = this.isTransientError(err);
-      const errorCode = String(
-        err?.status || err?.code || err?.response?.status || 'UNKNOWN'
-      );
+      const status = Number(err?.status || err?.code || err?.response?.status);
+      const msg = (err?.response?.data?.error?.message || err?.message || '').toLowerCase();
+
+      // 409 ALREADY_EXISTS or user already a member -> treated as success (INVITED)
+      if (
+        status === 409 ||
+        msg.includes('already_exists') ||
+        msg.includes('already exists') ||
+        msg.includes('already a member')
+      ) {
+        logger.info('Student already invited or existing member in Google Classroom', {
+          leadId,
+          email: emailNormalized,
+          courseId,
+        });
+        return {
+          success: true,
+          status: 'INVITED',
+        };
+      }
+
+      const isInvalidEmail = this.isInvalidEmailError(err);
+      const isTransient = !isInvalidEmail && this.isTransientError(err);
+      const errorCode = isInvalidEmail
+        ? 'INVALID_GOOGLE_EMAIL'
+        : String(err?.status || err?.code || err?.response?.status || 'UNKNOWN');
       const errorMessage =
         err?.response?.data?.error?.message || err?.message || 'Google API error';
 
@@ -159,6 +202,7 @@ export class GoogleClassroomService {
         email: emailNormalized,
         errorCode,
         isTransient: String(isTransient),
+        isInvalidEmail: String(isInvalidEmail),
       });
 
       return {
@@ -167,9 +211,11 @@ export class GoogleClassroomService {
         errorCode,
         errorMessage,
         isTransient,
+        isInvalidEmail,
       };
     }
   }
+
 
   /**
    * Remove student from Google Classroom course upon refund

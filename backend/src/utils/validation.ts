@@ -55,5 +55,15 @@ export const verifyPaymentSchema = z.object({
   razorpay_signature: z.string().min(1, 'Signature is required'),
 });
 
+export const updateGoogleEmailSchema = z.object({
+  orderId: z.string().min(1, 'Order ID is required'),
+  email: z
+    .string({ required_error: 'Google account email is required' })
+    .trim()
+    .email('Invalid email syntax')
+    .transform(normalizeEmail),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
+export type UpdateGoogleEmailInput = z.infer<typeof updateGoogleEmailSchema>;
