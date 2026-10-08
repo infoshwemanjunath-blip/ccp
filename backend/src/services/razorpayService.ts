@@ -46,7 +46,7 @@ export class RazorpayService {
     currency?: string;
     receipt?: string;
     notes?: Record<string, string>;
-  }): Promise<{ id: string; amount: number; currency: string; [key: string]: any }> {
+  }): Promise<{ id: string; amount: number; currency: string;[key: string]: any }> {
     const client = this.getClient();
     const order = await this.withRetry(() =>
       client.orders.create({
@@ -84,7 +84,7 @@ export class RazorpayService {
          ORDER BY created_at DESC LIMIT 1`,
         [lead.id]
       );
-      
+
       if (existingRes.rows.length > 0) {
         const existing = existingRes.rows[0];
         logger.info('Reusing existing pending Razorpay order', { leadId: lead.id, orderId: existing.razorpay_order_id });

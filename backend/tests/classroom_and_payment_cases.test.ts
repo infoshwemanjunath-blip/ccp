@@ -28,7 +28,7 @@ describe('Required Test Cases - Google Classroom & Payment Flow', () => {
 
     // Mock DB queries for handlePaymentSuccess
     let outboxInserted = false;
-    
+
     vi.spyOn(poolModule, 'withTransaction').mockImplementation(async (cb: any) => {
       const mockClient = {
         query: vi.fn(async (sql: string, params?: any[]) => {

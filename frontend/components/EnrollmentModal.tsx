@@ -219,7 +219,7 @@ export default function EnrollmentModal() {
             setModalState("SUCCESS");
             setStatusMessage(
               data.message ||
-                `Invitation sent to ${formData.email}. Open Classroom and click Accept.`
+              `Invitation sent to ${formData.email}. Open Classroom and click Accept.`
             );
             return;
           }
@@ -229,7 +229,7 @@ export default function EnrollmentModal() {
             setModalState("INVALID_GOOGLE_EMAIL");
             setStatusMessage(
               data.message ||
-                "Payment received. The email provided is not a registered Google Account. Please provide your Google account email."
+              "Payment received. The email provided is not a registered Google Account. Please provide your Google account email."
             );
             return;
           }
@@ -239,7 +239,7 @@ export default function EnrollmentModal() {
             setModalState("FAILED");
             setStatusMessage(
               data.message ||
-                "Your payment was received. Our team will verify and invite your Google email shortly."
+              "Your payment was received. Our team will verify and invite your Google email shortly."
             );
             return;
           }
@@ -365,8 +365,8 @@ export default function EnrollmentModal() {
           setModalState("FORM");
           setStatusMessage(
             errData.message ||
-              errData.error ||
-              "Unable to initiate order. Please try again."
+            errData.error ||
+            "Unable to initiate order. Please try again."
           );
           return;
         }
@@ -448,8 +448,8 @@ export default function EnrollmentModal() {
               setModalState("FAILED");
               setStatusMessage(
                 verifyData.message ||
-                  verifyData.error ||
-                  "Payment signature could not be verified."
+                verifyData.error ||
+                "Payment signature could not be verified."
               );
               return;
             }
@@ -466,7 +466,7 @@ export default function EnrollmentModal() {
         setModalState("FORM");
         setStatusMessage(
           response.error?.description ||
-            "Payment attempt failed. Please check your bank or card details."
+          "Payment attempt failed. Please check your bank or card details."
         );
       });
 
@@ -535,13 +535,12 @@ export default function EnrollmentModal() {
         {/* Status Alert Message if any */}
         {statusMessage && (
           <div
-            className={`mb-5 p-3.5 rounded-xl text-xs sm:text-sm flex items-start gap-2.5 ${
-              modalState === "FAILED"
+            className={`mb-5 p-3.5 rounded-xl text-xs sm:text-sm flex items-start gap-2.5 ${modalState === "FAILED"
                 ? "bg-red-50 text-red-800 border border-red-200"
                 : modalState === "ALREADY_ENROLLED"
-                ? "bg-blue-50 text-blue-900 border border-blue-200"
-                : "bg-peach-100 text-deepGreen-950 border border-peach-300"
-            }`}
+                  ? "bg-blue-50 text-blue-900 border border-blue-200"
+                  : "bg-peach-100 text-deepGreen-950 border border-peach-300"
+              }`}
           >
             {modalState === "FAILED" ? (
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -643,6 +642,9 @@ export default function EnrollmentModal() {
 
             {/* Submit Button */}
             <div className="pt-2">
+              <p className="text-center text-xs font-bold uppercase tracking-wider text-deepGreen-900 mb-2">
+                NON-REFUNDABLE
+              </p>
               <button
                 type="submit"
                 disabled={modalState === "CREATING_ORDER"}

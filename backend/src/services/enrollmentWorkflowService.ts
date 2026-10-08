@@ -35,7 +35,7 @@ export class EnrollmentWorkflowService {
           if (lookupRes.rows.length === 0) {
             throw new Error(`Payment record not found for order: ${orderId}`);
           }
-          
+
           const internalPaymentId = lookupRes.rows[0].id;
           const leadId = lookupRes.rows[0].lead_id;
 
@@ -108,21 +108,21 @@ export class EnrollmentWorkflowService {
 
           // 8. Insert into outbox_jobs to trigger async side-effects
           if (env.AUTO_CLASSROOM_ENROLLMENT_ENABLED) {
-             await client.query(
-               `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
+            await client.query(
+              `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
                 VALUES ($1, 'CLASSROOM_INVITE', $2, 'PENDING')
                 ON CONFLICT (payment_id, job_type) DO NOTHING`,
-               [
-                 payment.id,
-                 JSON.stringify({
-                   leadId: lead.id,
-                   email: lead.email_normalized,
-                   fullName: lead.full_name,
-                   courseId: env.GOOGLE_CLASSROOM_COURSE_ID,
-                   orderId: orderId
-                 })
-               ]
-             );
+              [
+                payment.id,
+                JSON.stringify({
+                  leadId: lead.id,
+                  email: lead.email_normalized,
+                  fullName: lead.full_name,
+                  courseId: env.GOOGLE_CLASSROOM_COURSE_ID,
+                  orderId: orderId
+                })
+              ]
+            );
           }
 
           return { transitioned: true };
@@ -192,10 +192,10 @@ export class EnrollmentWorkflowService {
     let enrollment: ClassroomEnrollmentRecord | null = null;
     try {
       const enrollmentRes = await withTransaction(async (client) => {
-         return client.query<ClassroomEnrollmentRecord>(
+        return client.query<ClassroomEnrollmentRecord>(
           `SELECT * FROM classroom_enrollments WHERE lead_id = $1 AND course_id = $2 FOR UPDATE`,
           [leadId, courseId]
-         );
+        );
       });
       if (enrollmentRes.rows.length > 0) {
         enrollment = enrollmentRes.rows[0];
@@ -206,7 +206,7 @@ export class EnrollmentWorkflowService {
     }
 
     if (!enrollment) {
-        return { success: false, errorMessage: 'Enrollment record missing' };
+      return { success: false, errorMessage: 'Enrollment record missing' };
     }
 
     // Already enrolled
@@ -279,18 +279,18 @@ export class EnrollmentWorkflowService {
       // Insert welcome email into outbox
       try {
         await query(
-            `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
+          `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
              VALUES (
                (SELECT payment_id FROM enrollments WHERE user_id = $1 AND course_id = $2 LIMIT 1)::uuid,
                'WELCOME_EMAIL', $3, 'PENDING'
              ) ON CONFLICT DO NOTHING`,
-            [
-              leadId, courseId,
-              JSON.stringify({ toEmail: email, fullName, courseId })
-            ]
+          [
+            leadId, courseId,
+            JSON.stringify({ toEmail: email, fullName, courseId })
+          ]
         );
       } catch (err) {
-         logger.warn('Could not insert WELCOME_EMAIL outbox job', { leadId });
+        logger.warn('Could not insert WELCOME_EMAIL outbox job', { leadId });
       }
 
       return { success: true };
@@ -303,23 +303,23 @@ export class EnrollmentWorkflowService {
         `UPDATE enrollments
          SET status = 'FAILED', attempts = $2, last_error = $3, updated_at = NOW()
          WHERE user_id = $4 AND course_id = $5`,
-        [ 'FAILED', attemptNumber, result.errorMessage || errorCode, leadId, courseId ]
+        ['FAILED', attemptNumber, result.errorMessage || errorCode, leadId, courseId]
       );
 
       await query(
         `UPDATE classroom_enrollments
          SET status = 'FAILED', attempt_count = $2, last_error_code = $3, last_error_message = $4, updated_at = NOW()
          WHERE id = $5`,
-        [ 'FAILED', attemptNumber, errorCode, result.errorMessage || 'Enrollment error', enrollment.id ]
+        ['FAILED', attemptNumber, errorCode, result.errorMessage || 'Enrollment error', enrollment.id]
       );
 
       await query(`UPDATE leads SET enrollment_status = 'FAILED', updated_at = NOW() WHERE id = $1`, [leadId]);
 
       return {
-          success: false,
-          errorCode: result.errorCode,
-          errorMessage: result.errorMessage,
-          isInvalidEmail: result.isInvalidEmail
+        success: false,
+        errorCode: result.errorCode,
+        errorMessage: result.errorMessage,
+        isInvalidEmail: result.isInvalidEmail
       };
     }
   }
@@ -331,81 +331,81 @@ export class EnrollmentWorkflowService {
     logger.info('Processing refund event', { orderId, paymentId });
 
     try {
-        await withTransaction(async (client) => {
-          await client.query('SET LOCAL lock_timeout = 2000');
-          
-          const lookupRes = await client.query(
-            `SELECT p.id as payment_id, p.lead_id, l.email_normalized, ce.id as enrollment_id, ce.google_user_id, ce.invitation_id, ce.course_id
+      await withTransaction(async (client) => {
+        await client.query('SET LOCAL lock_timeout = 2000');
+
+        const lookupRes = await client.query(
+          `SELECT p.id as payment_id, p.lead_id, l.email_normalized, ce.id as enrollment_id, ce.google_user_id, ce.invitation_id, ce.course_id
              FROM payments p
              JOIN leads l ON p.lead_id = l.id
              LEFT JOIN classroom_enrollments ce ON ce.lead_id = l.id
              WHERE p.razorpay_order_id = $1 OR p.razorpay_payment_id = $2
              LIMIT 1`,
-            [orderId || '', paymentId || '']
-          );
+          [orderId || '', paymentId || '']
+        );
 
-          if (lookupRes.rows.length === 0) {
-            logger.warn('Refund lookup found no matching payment', { orderId, paymentId });
-            return;
-          }
+        if (lookupRes.rows.length === 0) {
+          logger.warn('Refund lookup found no matching payment', { orderId, paymentId });
+          return;
+        }
 
-          const item = lookupRes.rows[0];
+        const item = lookupRes.rows[0];
 
-          // 1. Lock Leads
-          await client.query(`SELECT id FROM leads WHERE id = $1 FOR UPDATE`, [item.lead_id]);
-          // 2. Lock Payments
-          const paymentRes = await client.query(`SELECT id, status FROM payments WHERE id = $1 FOR UPDATE`, [item.payment_id]);
-          const paymentStatus = paymentRes.rows[0].status;
+        // 1. Lock Leads
+        await client.query(`SELECT id FROM leads WHERE id = $1 FOR UPDATE`, [item.lead_id]);
+        // 2. Lock Payments
+        const paymentRes = await client.query(`SELECT id, status FROM payments WHERE id = $1 FOR UPDATE`, [item.payment_id]);
+        const paymentStatus = paymentRes.rows[0].status;
 
-          if (paymentStatus === 'REFUNDED') {
-            logger.info('Payment already refunded, skipping duplicate refund processing', { orderId, paymentId });
-            return;
-          }
+        if (paymentStatus === 'REFUNDED') {
+          logger.info('Payment already refunded, skipping duplicate refund processing', { orderId, paymentId });
+          return;
+        }
 
-          // Update Status
+        // Update Status
+        await client.query(
+          `UPDATE payments SET status = 'REFUNDED', updated_at = NOW() WHERE id = $1`,
+          [item.payment_id]
+        );
+
+        await client.query(
+          `UPDATE leads SET payment_status = 'REFUNDED', enrollment_status = 'REMOVAL_PENDING', updated_at = NOW() WHERE id = $1`,
+          [item.lead_id]
+        );
+
+        await client.query(
+          `UPDATE enrollments SET status = 'FAILED', updated_at = NOW() WHERE user_id = $1`,
+          [item.lead_id]
+        );
+
+        if (item.enrollment_id) {
           await client.query(
-            `UPDATE payments SET status = 'REFUNDED', updated_at = NOW() WHERE id = $1`,
-            [item.payment_id]
+            `UPDATE classroom_enrollments SET status = 'REMOVAL_PENDING', updated_at = NOW() WHERE id = $1`,
+            [item.enrollment_id]
           );
 
+          // Insert removal job into outbox
           await client.query(
-            `UPDATE leads SET payment_status = 'REFUNDED', enrollment_status = 'REMOVAL_PENDING', updated_at = NOW() WHERE id = $1`,
-            [item.lead_id]
-          );
-
-          await client.query(
-            `UPDATE enrollments SET status = 'FAILED', updated_at = NOW() WHERE user_id = $1`,
-            [item.lead_id]
-          );
-
-          if (item.enrollment_id) {
-            await client.query(
-              `UPDATE classroom_enrollments SET status = 'REMOVAL_PENDING', updated_at = NOW() WHERE id = $1`,
-              [item.enrollment_id]
-            );
-
-            // Insert removal job into outbox
-            await client.query(
-              `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
+            `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
                VALUES ($1, 'CLASSROOM_REMOVE', $2, 'PENDING')
                ON CONFLICT (payment_id, job_type) DO NOTHING`,
-              [
-                item.payment_id,
-                JSON.stringify({
-                   leadId: item.lead_id,
-                   email: item.email_normalized,
-                   googleUserId: item.google_user_id,
-                   invitationId: item.invitation_id,
-                   courseId: item.course_id || env.GOOGLE_CLASSROOM_COURSE_ID,
-                   enrollmentId: item.enrollment_id
-                })
-              ]
-            );
-          }
-        });
+            [
+              item.payment_id,
+              JSON.stringify({
+                leadId: item.lead_id,
+                email: item.email_normalized,
+                googleUserId: item.google_user_id,
+                invitationId: item.invitation_id,
+                courseId: item.course_id || env.GOOGLE_CLASSROOM_COURSE_ID,
+                enrollmentId: item.enrollment_id
+              })
+            ]
+          );
+        }
+      });
     } catch (dbErr: any) {
-        logger.error('Failed to process refund event transaction', dbErr, { orderId, paymentId });
-        throw dbErr;
+      logger.error('Failed to process refund event transaction', dbErr, { orderId, paymentId });
+      throw dbErr;
     }
   }
 }

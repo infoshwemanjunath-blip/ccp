@@ -87,17 +87,17 @@ export interface CheckoutOrderResponse {
 
 export interface EnrollmentStatusResponse {
   status:
-    | 'PAYMENT_PENDING'
-    | 'PAYMENT_SUCCESS'
-    | 'PAYMENT_FAILED'
-    | 'ENROLLMENT_PENDING'
-    | 'INVITED'
-    | 'ENROLLMENT_SUCCESS'
-    | 'ENROLLMENT_FAILED'
-    | 'INVALID_GOOGLE_EMAIL'
-    | 'ALREADY_ENROLLED'
-    | 'REFUNDED'
-    | 'NOT_FOUND';
+  | 'PAYMENT_PENDING'
+  | 'PAYMENT_SUCCESS'
+  | 'PAYMENT_FAILED'
+  | 'ENROLLMENT_PENDING'
+  | 'INVITED'
+  | 'ENROLLMENT_SUCCESS'
+  | 'ENROLLMENT_FAILED'
+  | 'INVALID_GOOGLE_EMAIL'
+  | 'ALREADY_ENROLLED'
+  | 'REFUNDED'
+  | 'NOT_FOUND';
   message: string;
   classroomUrl?: string;
   email?: string;

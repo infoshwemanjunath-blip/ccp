@@ -295,6 +295,29 @@ export class GoogleClassroomService {
       };
     }
   }
+
+
+  /**
+   * Check whether an invited student has accepted invitation and is actively enrolled
+   */
+  async checkStudentEnrollment(
+  userId: string,
+  courseId: string = env.GOOGLE_CLASSROOM_COURSE_ID
+): Promise < { isEnrolled: boolean; googleUserId?: string } > {
+  const client = this.getClient();
+  try {
+    const student = await client.courses.students.get({
+      courseId,
+      userId,
+    });
+    if(student.data && student.data.userId) {
+  return { isEnrolled: true, googleUserId: student.data.userId };
+}
+return { isEnrolled: false };
+    } catch (err: any) {
+  return { isEnrolled: false };
+}
+  }
 }
 
 export const googleClassroomService = new GoogleClassroomService();

@@ -30,7 +30,7 @@ describe('EnrollmentModal', () => {
     });
     const backButton = await screen.findByRole('button', { name: /Back to overview/i });
     expect(backButton).toBeInTheDocument();
-    
+
     act(() => {
       fireEvent.click(backButton);
     });
@@ -44,7 +44,7 @@ describe('EnrollmentModal', () => {
     act(() => {
       openEnrollmentModal();
     });
-    
+
     const submitButton = await screen.findByRole('button', { name: /Proceed to Secure Pay/i });
     const form = submitButton.closest('form')!;
     act(() => {
