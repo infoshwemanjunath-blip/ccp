@@ -27,28 +27,44 @@ describe('Required Test Cases - Google Classroom & Payment Flow', () => {
     const emailSpy = vi.spyOn(emailService, 'sendClassroomAccessEmail').mockResolvedValueOnce(true);
 
     // Mock DB queries for handlePaymentSuccess
-    vi.spyOn(poolModule, 'withTransaction')
-      .mockResolvedValueOnce({
-        id: 'lead_1',
-        full_name: 'Rahul Sharma',
-        email_normalized: 'rahul@gmail.com',
-        payment_status: 'PAID',
-        enrollment_status: 'PENDING',
-      } as any)
-      .mockResolvedValueOnce({
-        rows: [{ id: 'enr_1', attempt_count: 0, status: 'PENDING' }],
-      } as any);
-
-    vi.spyOn(poolModule, 'query').mockResolvedValue({ rows: [] } as any);
+    let outboxInserted = false;
+    
+    vi.spyOn(poolModule, 'withTransaction').mockImplementation(async (cb: any) => {
+      const mockClient = {
+        query: vi.fn(async (sql: string, params?: any[]) => {
+          if (sql.includes('SELECT id, lead_id FROM payments WHERE razorpay_order_id = $1')) {
+            return {
+              rows: [{ id: 'pay_1', lead_id: 'lead_1' }]
+            } as any;
+          }
+          if (sql.includes('SELECT * FROM leads WHERE id = $1 FOR UPDATE')) {
+            return {
+              rows: [{ id: 'lead_1', full_name: 'Rahul Sharma', email_normalized: 'rahul@gmail.com', payment_status: 'PENDING', enrollment_status: 'PENDING' }]
+            } as any;
+          }
+          if (sql.includes('SELECT * FROM payments WHERE id = $1 FOR UPDATE')) {
+            return {
+              rows: [{ id: 'pay_1', status: 'PENDING' }]
+            } as any;
+          }
+          if (sql.includes('UPDATE payments SET status = \'PAID\'')) {
+            return { rows: [{ id: 'pay_1', status: 'PAID', lead_id: 'lead_1' }] } as any;
+          }
+          if (sql.includes('UPDATE leads SET payment_status')) {
+            return { rows: [{ id: 'lead_1', full_name: 'Rahul Sharma', email_normalized: 'rahul@gmail.com', payment_status: 'PAID' }] } as any;
+          }
+          if (sql.includes('INSERT INTO outbox_jobs')) {
+            outboxInserted = true;
+          }
+          return { rows: [] } as any;
+        })
+      };
+      return await cb(mockClient);
+    });
 
     await enrollmentWorkflowService.handlePaymentSuccess('order_succ_1', 'pay_succ_1');
 
-    expect(enrollSpy).toHaveBeenCalledWith('lead_1', 'rahul@gmail.com', expect.any(String));
-    expect(emailSpy).toHaveBeenCalledWith({
-      toEmail: 'rahul@gmail.com',
-      fullName: 'Rahul Sharma',
-      courseId: expect.any(String),
-    });
+    expect(outboxInserted).toBe(true);
 
     // Verify status returns direct classroomUrl strictly on PAID + ENROLLED
     vi.spyOn(poolModule, 'query').mockResolvedValueOnce({
@@ -218,7 +234,13 @@ describe('Required Test Cases - Google Classroom & Payment Flow', () => {
       updated_at: new Date(),
     } as any;
 
-    await enrollmentWorkflowService.executeEnrollment(lead);
+    const payload = {
+      leadId: 'lead_inv',
+      email: 'user@yahoo.com',
+      courseId: env.GOOGLE_CLASSROOM_COURSE_ID
+    };
+
+    await enrollmentWorkflowService.executeClassroomInvite(payload, 1);
 
     // Verify last_error_code recorded as INVALID_GOOGLE_EMAIL
     expect(querySpy).toHaveBeenCalledWith(
@@ -248,7 +270,7 @@ describe('Required Test Cases - Google Classroom & Payment Flow', () => {
       id: 'lead_inv',
       email_normalized: 'correct.google@gmail.com',
     } as any);
-    const reEnrollSpy = vi.spyOn(enrollmentWorkflowService, 'executeEnrollment').mockResolvedValueOnce();
+    const reEnrollSpy = vi.spyOn(enrollmentWorkflowService, 'enqueueClassroomInvite').mockResolvedValueOnce(undefined);
 
     const updateRes = await request(app)
       .post('/api/enrollment/update-google-email')
@@ -291,11 +313,19 @@ describe('Required Test Cases - Google Classroom & Payment Flow', () => {
       updated_at: new Date(),
     } as any;
 
-    await enrollmentWorkflowService.executeEnrollment(lead);
+    const payload = {
+      leadId: 'lead_trans',
+      email: 'trans@gmail.com',
+      courseId: env.GOOGLE_CLASSROOM_COURSE_ID
+    };
 
-    // Verify enrollment_jobs retry queue insert was called
+    await enrollmentWorkflowService.executeClassroomInvite(payload, 1);
+
+    // Verify outbox_jobs retry queue update wasn't exactly what this did, wait
+    // actually executeClassroomInvite doesn't insert back into outbox_jobs itself,
+    // the worker does it by rescheduling. The query spy can just check that it updated classroom_enrollments to FAILED.
     expect(querySpy).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO enrollment_jobs'),
+      expect.stringContaining('UPDATE classroom_enrollments'),
       expect.any(Array)
     );
   });

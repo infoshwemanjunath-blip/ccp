@@ -18,8 +18,28 @@ export class RazorpayService {
     return this.razorpayInstance;
   }
 
+  private async withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelayMs = 200): Promise<T> {
+    let lastError: any;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        lastError = err;
+        const statusCode = err?.statusCode || err?.status_code || err?.status;
+        if (statusCode && statusCode >= 400 && statusCode < 500) {
+          throw err;
+        }
+        if (attempt < retries) {
+          const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 100;
+          await new Promise((res) => setTimeout(res, delay));
+        }
+      }
+    }
+    throw lastError;
+  }
+
   /**
-   * Create standard Razorpay order
+   * Create standard Razorpay order with exponential backoff
    */
   async createStandardOrder(params: {
     amount: number;
@@ -28,23 +48,24 @@ export class RazorpayService {
     notes?: Record<string, string>;
   }): Promise<{ id: string; amount: number; currency: string; [key: string]: any }> {
     const client = this.getClient();
-    const order = await client.orders.create({
-      amount: params.amount,
-      currency: params.currency || 'INR',
-      receipt: params.receipt || `rcpt_${Date.now()}`,
-      notes: params.notes,
-    });
+    const order = await this.withRetry(() =>
+      client.orders.create({
+        amount: params.amount,
+        currency: params.currency || 'INR',
+        receipt: params.receipt || `rcpt_${Date.now()}`,
+        notes: params.notes,
+      })
+    );
     return order as any;
   }
 
   /**
-   * Fetch order from Razorpay to read metadata/notes
+   * Fetch order from Razorpay to read metadata/notes with retry
    */
   async fetchOrder(orderId: string): Promise<any> {
     const client = this.getClient();
-    return client.orders.fetch(orderId);
+    return this.withRetry(() => client.orders.fetch(orderId));
   }
-
 
   /**
    * Create Razorpay order server-side and record in payments table
@@ -54,16 +75,42 @@ export class RazorpayService {
     const currency = env.COURSE_CURRENCY;
     const receipt = `rcpt_${lead.id.substring(0, 8)}_${Date.now()}`;
 
+    // Check for an existing PENDING order created in the last 15 minutes
+    try {
+      const existingRes = await query(
+        `SELECT razorpay_order_id, amount, currency 
+         FROM payments 
+         WHERE lead_id = $1 AND status = 'PENDING' AND created_at > NOW() - INTERVAL '15 minutes'
+         ORDER BY created_at DESC LIMIT 1`,
+        [lead.id]
+      );
+      
+      if (existingRes.rows.length > 0) {
+        const existing = existingRes.rows[0];
+        logger.info('Reusing existing pending Razorpay order', { leadId: lead.id, orderId: existing.razorpay_order_id });
+        return {
+          orderId: existing.razorpay_order_id,
+          amount: existing.amount,
+          currency: existing.currency,
+          keyId: env.RAZORPAY_KEY_ID,
+        };
+      }
+    } catch (dbErr) {
+      logger.warn('Failed to check for existing pending order, creating new one', { leadId: lead.id });
+    }
+
     const client = this.getClient();
-    const order = await client.orders.create({
-      amount,
-      currency,
-      receipt,
-      notes: {
-        leadId: lead.id,
-        email: lead.email_normalized,
-      },
-    });
+    const order = await this.withRetry(() =>
+      client.orders.create({
+        amount,
+        currency,
+        receipt,
+        notes: {
+          leadId: lead.id,
+          email: lead.email_normalized,
+        },
+      })
+    );
 
     // Record order in payments table (graceful if DB offline)
     try {

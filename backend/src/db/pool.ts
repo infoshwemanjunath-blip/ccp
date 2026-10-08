@@ -8,9 +8,10 @@ export const pool = new pg.Pool({
     env.NODE_ENV === 'production' || (env.DATABASE_URL && env.DATABASE_URL.includes('supabase.co'))
       ? { rejectUnauthorized: true }
       : false,
-  max: 20,
+  max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  statement_timeout: 10000,
 });
 
 pool.on('error', (err) => {
@@ -34,7 +35,11 @@ export async function withTransaction<T>(
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Error rolling back transaction', rollbackError);
+    }
     throw error;
   } finally {
     client.release();

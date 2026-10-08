@@ -13,52 +13,29 @@ export class LeadService {
     email: string,
     emailNormalized: string
   ): Promise<{ lead: LeadRecord; alreadyEnrolled: boolean }> {
-    const existing = await query<LeadRecord>(
-      `SELECT * FROM leads WHERE email_normalized = $1 LIMIT 1`,
-      [emailNormalized]
-    );
-
-    if (existing.rows.length > 0) {
-      const lead = existing.rows[0];
-
-      // If customer has already paid, prevent duplicate payment even if enrollment is pending
-      if (lead.payment_status === 'PAID') {
-        logger.info('Lead already paid', {
-          leadId: lead.id,
-          email: emailNormalized,
-        });
-        return { lead, alreadyEnrolled: true };
-      }
-
-      // Update lead details with latest submission
-      const updated = await query<LeadRecord>(
-        `UPDATE leads 
-         SET full_name = $1, phone = $2, email = $3, updated_at = NOW()
-         WHERE id = $4
-         RETURNING *`,
-        [fullName, phone, email, lead.id]
-      );
-
-      logger.info('Updated existing lead', {
-        leadId: lead.id,
-        email: emailNormalized,
-      });
-      return { lead: updated.rows[0], alreadyEnrolled: false };
-    }
-
-    // Insert new lead
-    const inserted = await query<LeadRecord>(
+    // Atomic UPSERT using ON CONFLICT (email_normalized)
+    const res = await query<LeadRecord>(
       `INSERT INTO leads (full_name, phone, email, email_normalized, payment_status, enrollment_status)
        VALUES ($1, $2, $3, $4, 'PENDING', 'PENDING')
+       ON CONFLICT (email_normalized) DO UPDATE 
+       SET full_name = CASE WHEN leads.payment_status = 'PAID' THEN leads.full_name ELSE EXCLUDED.full_name END,
+           phone = CASE WHEN leads.payment_status = 'PAID' THEN leads.phone ELSE EXCLUDED.phone END,
+           email = EXCLUDED.email,
+           updated_at = NOW()
        RETURNING *`,
       [fullName, phone, email, emailNormalized]
     );
 
-    logger.info('Created new lead', {
-      leadId: inserted.rows[0].id,
-      email: emailNormalized,
-    });
-    return { lead: inserted.rows[0], alreadyEnrolled: false };
+    if (res.rows.length > 0) {
+      const lead = res.rows[0];
+      const alreadyEnrolled = lead.payment_status === 'PAID';
+      if (alreadyEnrolled) {
+        logger.info('Lead already paid', { leadId: lead.id, email: emailNormalized });
+      }
+      return { lead, alreadyEnrolled };
+    }
+
+    throw new Error('Could not find or create lead');
   }
 
   async updateLatestOrder(leadId: string, orderId: string): Promise<void> {

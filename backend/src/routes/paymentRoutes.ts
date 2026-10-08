@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { verifyPaymentSchema } from '../utils/validation.js';
 import { razorpayService } from '../services/razorpayService.js';
 import { enrollmentWorkflowService } from '../services/enrollmentWorkflowService.js';
+import { leadService } from '../services/leadService.js';
+import { query } from '../db/pool.js';
 import { verifyLimiter, orderLimiter } from '../middleware/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
@@ -28,6 +30,29 @@ paymentRouter.post('/create-order', orderLimiter, async (req: Request, res: Resp
       receipt,
       notes,
     });
+
+    const customerEmail = notes?.email || req.body?.email;
+    if (customerEmail) {
+      try {
+        const leadRes = await leadService.findOrCreateLead(
+          notes?.name || req.body?.name || 'Student',
+          notes?.phone || req.body?.phone || '',
+          customerEmail,
+          customerEmail.toLowerCase().trim()
+        );
+        await query(
+          `INSERT INTO payments (lead_id, razorpay_order_id, amount, currency, status)
+           VALUES ($1, $2, $3, $4, 'PENDING')
+           ON CONFLICT (razorpay_order_id) DO NOTHING`,
+          [leadRes.lead.id, order.id, amount, currency]
+        );
+      } catch (dbErr) {
+        logger.warn('Could not persist payment record in standard create-order route', {
+          error: String(dbErr),
+          orderId: order.id,
+        });
+      }
+    }
 
     return res.status(200).json({
       order_id: order.id,

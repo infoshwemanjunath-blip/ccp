@@ -148,7 +148,7 @@ enrollmentRouter.post('/update-google-email', async (req: Request, res: Response
     const updatedLead = await leadService.updateGoogleEmail(orderId, email);
 
     // Re-trigger enrollment workflow with updated Google email
-    await enrollmentWorkflowService.executeEnrollment(updatedLead);
+    await enrollmentWorkflowService.enqueueClassroomInvite(updatedLead, orderId);
 
     return res.status(200).json({
       success: true,

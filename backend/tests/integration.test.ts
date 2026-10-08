@@ -222,6 +222,8 @@ describe('Integration Tests - Enrollment & Payment Endpoints', () => {
           razorpay_order_id: orderId,
           razorpay_payment_id: paymentId,
           razorpay_signature: validSig,
+          email: 'valid@example.com',
+          name: 'Valid User',
         });
 
       expect(res.status).toBe(200);

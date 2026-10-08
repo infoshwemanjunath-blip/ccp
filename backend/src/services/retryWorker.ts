@@ -1,4 +1,4 @@
-import { query } from '../db/pool.js';
+import { query, withTransaction } from '../db/pool.js';
 import { enrollmentWorkflowService } from './enrollmentWorkflowService.js';
 import { googleClassroomService } from './googleClassroomService.js';
 import { logger } from '../utils/logger.js';
@@ -34,114 +34,109 @@ export class RetryWorker {
     this.isProcessing = true;
 
     try {
-      // Find pending jobs whose scheduled retry time has arrived
-      const jobsRes = await query(
-        `SELECT j.id, j.enrollment_id, j.action, j.attempts, j.max_attempts,
-                ce.lead_id, ce.course_id, ce.google_email, ce.google_user_id, ce.invitation_id,
-                l.id as lead_id, l.email_normalized, l.full_name, l.phone, l.payment_status, l.enrollment_status
-         FROM enrollment_jobs j
-         JOIN classroom_enrollments ce ON j.enrollment_id = ce.id
-         JOIN leads l ON ce.lead_id = l.id
-         WHERE j.status = 'PENDING' AND j.next_run_at <= NOW()
-         ORDER BY j.next_run_at ASC
-         LIMIT 10
-         FOR UPDATE SKIP LOCKED`
-      );
+      // Find and lock pending outbox jobs within an atomic transaction
+      const jobs = await withTransaction(async (client) => {
+        const jobsRes = await client.query(
+          `SELECT id, payment_id, job_type, payload, attempts, max_attempts
+           FROM outbox_jobs
+           WHERE status = 'PENDING' AND next_run_at <= NOW()
+           ORDER BY next_run_at ASC
+           LIMIT 10
+           FOR UPDATE SKIP LOCKED`
+        );
 
-      for (const job of jobsRes.rows) {
-        logger.info('Processing retry job', {
+        if (jobsRes.rows.length === 0) return [];
+
+        const jobIds = jobsRes.rows.map((r: any) => r.id);
+        await client.query(
+          `UPDATE outbox_jobs SET status = 'PROCESSING', locked_at = NOW(), updated_at = NOW() WHERE id = ANY($1)`,
+          [jobIds]
+        );
+
+        return jobsRes.rows;
+      });
+
+      for (const job of jobs) {
+        logger.info('Processing outbox job', {
           jobId: job.id,
-          action: job.action,
+          jobType: job.job_type,
           attempt: String(job.attempts),
         });
 
-        // Mark processing
-        await query(
-          `UPDATE enrollment_jobs SET status = 'PROCESSING', updated_at = NOW() WHERE id = $1`,
-          [job.id]
-        );
+        let success = false;
+        let errorMessage = null;
+        let errorCode = null;
+        
+        try {
+            if (job.job_type === 'CLASSROOM_INVITE') {
+               const result = await enrollmentWorkflowService.executeClassroomInvite(job.payload, job.attempts + 1);
+               success = result.success;
+               errorMessage = result.errorMessage;
+               errorCode = result.errorCode;
+            } else if (job.job_type === 'WELCOME_EMAIL') {
+               const payload = job.payload;
+               // Check if email already sent by looking at payload or external state if possible.
+               // Assuming sendClassroomAccessEmail is mostly idempotent or we rely on outbox completion
+               await import('./emailService.js').then(m => m.emailService.sendClassroomAccessEmail({
+                 toEmail: payload.toEmail,
+                 fullName: payload.fullName,
+                 courseId: payload.courseId
+               }));
+               success = true;
+            } else if (job.job_type === 'CLASSROOM_REMOVE') {
+               const payload = job.payload;
+               const removalResult = await googleClassroomService.removeStudent(
+                 payload.leadId,
+                 payload.email,
+                 payload.googleUserId,
+                 payload.invitationId,
+                 payload.courseId
+               );
 
-        if (job.action === 'ENROLL') {
-          const lead: LeadRecord = {
-            id: job.lead_id,
-            full_name: job.full_name,
-            phone: job.phone,
-            email: job.email_normalized,
-            email_normalized: job.email_normalized,
-            payment_status: job.payment_status,
-            enrollment_status: job.enrollment_status,
-            created_at: new Date(),
-            updated_at: new Date(),
-          };
+               if (removalResult.success) {
+                 await query(
+                   `UPDATE classroom_enrollments SET status = 'REMOVED', removed_at = NOW(), updated_at = NOW() WHERE id = $1`,
+                   [payload.enrollmentId]
+                 );
+                 await query(
+                   `UPDATE leads SET enrollment_status = 'REMOVED', updated_at = NOW() WHERE id = $1`,
+                   [payload.leadId]
+                 );
+                 success = true;
+               } else {
+                 success = false;
+                 errorMessage = removalResult.errorMessage || removalResult.errorCode;
+                 errorCode = removalResult.errorCode;
+               }
+            }
+        } catch (err: any) {
+            success = false;
+            errorMessage = err.message || 'Unknown error during job execution';
+        }
 
-          await enrollmentWorkflowService.executeEnrollment(lead, true);
-
-          // Check if enrollment succeeded
-          const checkRes = await query(
-            `SELECT status FROM classroom_enrollments WHERE id = $1`,
-            [job.enrollment_id]
-          );
-
-          if (checkRes.rows[0]?.status === 'ENROLLED') {
+        if (success) {
             await query(
-              `UPDATE enrollment_jobs SET status = 'COMPLETED', updated_at = NOW() WHERE id = $1`,
+              `UPDATE outbox_jobs SET status = 'COMPLETED', updated_at = NOW() WHERE id = $1`,
               [job.id]
             );
-          } else if (job.attempts + 1 >= job.max_attempts) {
+        } else if (job.attempts + 1 >= job.max_attempts) {
             await query(
-              `UPDATE enrollment_jobs SET status = 'FAILED', updated_at = NOW() WHERE id = $1`,
-              [job.id]
+              `UPDATE outbox_jobs SET status = 'FAILED', last_error = $1, updated_at = NOW() WHERE id = $2`,
+              [errorMessage, job.id]
             );
-          } else {
+        } else {
             // Schedule next exponential retry
-            const backoff = Math.pow(2, job.attempts + 1) * 15;
+            const backoff = Math.pow(2, job.attempts + 1) * 30; // 60s, 120s, 240s...
             await query(
-              `UPDATE enrollment_jobs 
-               SET status = 'PENDING', attempts = attempts + 1, next_run_at = NOW() + ($1 || ' seconds')::INTERVAL, updated_at = NOW()
-               WHERE id = $2`,
-              [backoff, job.id]
+              `UPDATE outbox_jobs 
+               SET status = 'PENDING', attempts = attempts + 1, last_error = $1, next_run_at = NOW() + ($2 || ' seconds')::INTERVAL, updated_at = NOW(), locked_at = NULL
+               WHERE id = $3`,
+              [errorMessage, backoff, job.id]
             );
-          }
-        } else if (job.action === 'REMOVE') {
-          const removalResult = await googleClassroomService.removeStudent(
-            job.lead_id,
-            job.email_normalized,
-            job.google_user_id,
-            job.invitation_id,
-            job.course_id
-          );
-
-          if (removalResult.success) {
-            await query(
-              `UPDATE classroom_enrollments SET status = 'REMOVED', removed_at = NOW(), updated_at = NOW() WHERE id = $1`,
-              [job.enrollment_id]
-            );
-            await query(
-              `UPDATE leads SET enrollment_status = 'REMOVED', updated_at = NOW() WHERE id = $1`,
-              [job.lead_id]
-            );
-            await query(
-              `UPDATE enrollment_jobs SET status = 'COMPLETED', updated_at = NOW() WHERE id = $1`,
-              [job.id]
-            );
-          } else if (job.attempts + 1 >= job.max_attempts) {
-            await query(
-              `UPDATE enrollment_jobs SET status = 'FAILED', updated_at = NOW() WHERE id = $1`,
-              [job.id]
-            );
-          } else {
-            const backoff = Math.pow(2, job.attempts + 1) * 30;
-            await query(
-              `UPDATE enrollment_jobs 
-               SET status = 'PENDING', attempts = attempts + 1, next_run_at = NOW() + ($1 || ' seconds')::INTERVAL, updated_at = NOW()
-               WHERE id = $2`,
-              [backoff, job.id]
-            );
-          }
         }
       }
     } catch (err) {
-      logger.error('Error processing pending enrollment jobs', err);
+      logger.error('Error processing pending outbox jobs', err);
     } finally {
       this.isProcessing = false;
     }
