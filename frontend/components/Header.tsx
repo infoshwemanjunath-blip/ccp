@@ -11,19 +11,19 @@ export default function Header({ logoSrc, brandName }: HeaderProps) {
   return (
     <header className="w-full bg-cream-50/90 backdrop-blur-md border-b border-cream-300/60 sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-8 py-3.5 sm:py-4 flex items-center justify-between">
-        {/* Left: Client Logo */}
+        {/* Left: Content Creator Profile Photo */}
         <a
           href="#"
-          className="flex items-center gap-3 transition-opacity hover:opacity-90 focus:outline-none"
+          className="flex items-center gap-3 transition-opacity hover:opacity-90 focus:outline-none group"
           aria-label={brandName}
         >
-          <div className="relative h-10 w-28 sm:h-12 sm:w-36 flex items-center">
+          <div className="relative h-10 w-10 sm:h-12 sm:w-12 rounded-full overflow-hidden border-2 border-peach-200/90 shadow-sm flex items-center justify-center transition-transform group-hover:scale-105">
             <Image
               src={logoSrc}
               alt={brandName}
               fill
               priority
-              className="object-contain object-left"
+              className="object-cover"
             />
           </div>
         </a>
