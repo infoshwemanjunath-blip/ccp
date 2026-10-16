@@ -36,9 +36,11 @@ export class EmailService {
    * Send direct classroom invite link to the student email
    */
   async sendClassroomAccessEmail(options: SendClassroomEmailOptions): Promise<boolean> {
-    const { toEmail, fullName, courseId } = options;
-    const code = env.GOOGLE_CLASSROOM_ENROLLMENT_CODE || 'u5d3zmob';
-    const directClassroomUrl = options.joinUrl || env.GCR_LINK || `https://classroom.google.com/c/${courseId}?cjc=${code}`;
+    const code = env.GOOGLE_CLASSROOM_ENROLLMENT_CODE;
+    const directClassroomUrl = options.joinUrl || env.GCR_LINK || (code ? `https://classroom.google.com/c/${courseId}?cjc=${code}` : '');
+    if (!directClassroomUrl) {
+      logger.warn('Neither joinUrl, GCR_LINK, nor GOOGLE_CLASSROOM_ENROLLMENT_CODE configured for classroom access email');
+    }
 
     logger.info('Preparing classroom access email', { email: toEmail });
 
