@@ -28,8 +28,6 @@ const allowedOrigins = [
   ...(env.FRONTEND_URL ? env.FRONTEND_URL.split(',').map((u) => u.trim().replace(/\/$/, '')) : []),
   'https://superprofit.in',
   'https://www.superprofit.in',
-  'http://superprofit.in',
-  'http://www.superprofit.in',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ].filter(Boolean);
