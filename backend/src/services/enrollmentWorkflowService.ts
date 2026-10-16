@@ -325,16 +325,16 @@ export class EnrollmentWorkflowService {
         await query(
           `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
              VALUES (
-               (SELECT payment_id FROM enrollments WHERE user_id = $1 AND course_id = $2 LIMIT 1)::uuid,
-               'WELCOME_EMAIL', $3, 'PENDING'
+               (SELECT id FROM payments WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 1),
+               'WELCOME_EMAIL', $2, 'PENDING'
              ) ON CONFLICT DO NOTHING`,
           [
-            leadId, courseId,
+            leadId,
             JSON.stringify({ toEmail: email, fullName, courseId })
           ]
         );
       } catch (err) {
-        logger.warn('Could not insert WELCOME_EMAIL outbox job', { leadId });
+        logger.warn('Could not insert WELCOME_EMAIL outbox job', { leadId, error: err instanceof Error ? err.message : String(err) });
       }
 
       return { success: true };

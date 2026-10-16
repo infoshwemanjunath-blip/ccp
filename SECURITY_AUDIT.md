@@ -1,38 +1,39 @@
 # Pre-Push Security & Reliability Audit Report
 
 **Date:** 2026-10-16  
-**Auditor:** Automated Pre-Push Review  
-**Recommendation:** **DO NOT PUSH** (Action Required: 3 Critical Issues Must Be Resolved Before Public Push)
+**Auditor:** Pre-Push Automated Security & Bug Audit  
+**Recommendation:** **DO NOT PUSH** (Action Required: Rotate Committed Classroom Invite Code & Fix Critical RLS Policies Before Push)
 
 ---
 
-## 1. Executive Summary
+## 1. Summary
 
 | Severity | Security Findings | Bugs | Total |
 | :--- | :---: | :---: | :---: |
-| **Critical** | 2 | 0 | **2** |
-| **High** | 4 | 2 | **6** |
-| **Medium** | 3 | 1 | **4** |
-| **Low** | 2 | 1 | **3** |
-| **Total** | **11** | **4** | **15** |
+| **Critical** | 2 | 1 | **3** |
+| **High** | 3 | 2 | **5** |
+| **Medium** | 2 | 1 | **3** |
+| **Low** | 1 | 1 | **2** |
+| **Total** | **8** | **5** | **13** |
 
 ### Verdict: DO NOT PUSH
-The repository contains critical vulnerabilities that allow **anyone to obtain the Google Classroom join link without paying**:
-1. The live Google Classroom join URL with invite code (`cjc=435t7z2a`) is hardcoded in frontend component `EnrollmentModal.tsx` and compiled into client-side JavaScript bundles.
-2. The public endpoint `GET /api/enrollment/status/:orderId` returns `classroomUrl` (`GCR_LINK`) for any paid order without authentication, token, or phone number matching.
-3. The live classroom link was committed to git history in commits `cb11fa2` and `8dc0435`. The invite code must be rotated in Google Classroom before pushing.
+Pushing to GitHub in the current state poses two critical security hazards:
+1. **Live Google Classroom Invite Code Committed in Git History**: The active invite code `435t7z2a` and course ID `ODkxODYwMDQwMzQw` (`891860040340`) were committed in git history (commits `ce9ff91` and `8dc0435`). Anyone viewing the repository history can join Google Classroom without paying.
+2. **Supabase RLS Policies Grant Public Access (`PUBLIC`)**: In migrations `002_concurrency_hardening.sql` and `003_outbox_table.sql`, `CREATE POLICY` statements omitted `TO service_role`. In PostgreSQL, omitting the role targets `PUBLIC` by default, exposing `leads`, `payments`, `outbox_jobs`, and `enrollments` tables directly to PostgREST clients via the Supabase anonymous key.
 
 ---
 
 ## 2. Rotate These Before Anything Else
 
-The following secret/access credential was committed to git history and exposed in frontend code:
+The following credentials and access keys were committed in git history or hardcoded in working tree files. Rotating and invalidating them is mandatory prior to pushing code to GitHub:
 
-| Secret / Asset | Committed Location | First 4 Chars | Action Required |
+| Secret / Asset | Location & Commit | First 4 Chars | Action Required |
 | :--- | :--- | :--- | :--- |
-| **Google Classroom Invite Code** | `frontend/components/EnrollmentModal.tsx:59`<br>`backend/src/services/joinService.ts:71`<br>Commits: `cb11fa2`, `8dc0435` | `435t...` (`435t7z2a`) | **Reset immediately in Google Classroom**: Go to Classroom Settings -> General -> Invite codes -> Click "Reset". The old link will immediately stop accepting new students. Update `GCR_LINK` in backend Render environment variables. |
+| **Google Classroom Invite Code** | `frontend/components/EnrollmentModal.tsx:59`<br>`frontend/components/RazorpayCheckoutButton.tsx:163`<br>`backend/src/services/joinService.ts:71`<br>Commits: `ce9ff91`, `8dc0435` | `435t...` (`435t7z2a`) | **Reset immediately in Google Classroom**: Go to Classroom -> Settings -> General -> Invite codes -> Click "Reset". The old link stops accepting new students. Update `GCR_LINK` and `GOOGLE_CLASSROOM_ENROLLMENT_CODE` in Render backend environment variables. |
+| **Google Classroom Hardcoded Fallback** | `backend/src/services/emailService.ts:40`<br>Commits: `c07f04d`, `8dc0435`, `ac222ff` | `u5d3...` (`u5d3zmob`) | **Reset in Google Classroom if active**: Remove fallback default string from `emailService.ts:40` so missing env vars fail closed. |
+| **Razorpay Test Key ID (Committed)** | `frontend/components/EnrollmentModal.tsx`<br>`frontend/components/RazorpayCheckoutButton.tsx`<br>Commits: `cc6c587`, `ce9ff91` | `rzp_...` (`rzp_test_TkW6...`) | Regenerate Razorpay Test Key if test environment contains sensitive test customer data. |
 
-*(Note: Live Razorpay Key Secret `kO53...`, Supabase Service Role Key `sb_s...`, Google OAuth Refresh Token `1//0...`, and SMTP password were confirmed **NOT** committed in git history).*
+*(Note: Working tree `.env` and `backend/.env` live secrets—Razorpay Key Secret `kO53...`, Webhook Secret `kO53...`, Supabase Service Role Key `sb_s...`, Google OAuth Refresh Token `1//0...`, and SMTP password `Shwe...`—were verified and confirmed **NOT** committed in git history).*
 
 ---
 
@@ -40,165 +41,186 @@ The following secret/access credential was committed to git history and exposed 
 
 ### Critical Severity
 
-#### [SEC-01] Live Google Classroom Invite Code Hardcoded in Frontend Bundle
-- **File & Line:** `frontend/components/EnrollmentModal.tsx:59`, `frontend/components/EnrollmentModal.tsx:849`
-- **What is wrong:** `const DEFAULT_GCR_URL = "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a";` is defined directly in a client React component (`"use client"`).
-- **Exploitation:** Any visitor can open browser DevTools, inspect the client bundle or page source, and copy the Google Classroom join link (`cjc=435t7z2a`) to join the course completely free without paying.
-- **Suggested Fix:** Remove `DEFAULT_GCR_URL` from frontend code entirely. The frontend must only obtain classroom access via a verified backend join flow, never falling back to a static URL.
+#### [SEC-CRIT-01] Supabase RLS Policies Grant Full Unrestricted Access to Public Anonymous Role
+- **File & Line:** [`backend/migrations/002_concurrency_hardening.sql:138-156`](file:///d:/CCP/backend/migrations/002_concurrency_hardening.sql#L138-L156), [`backend/migrations/003_outbox_table.sql:33-35`](file:///d:/CCP/backend/migrations/003_outbox_table.sql#L33-L35)
+- **What is wrong:** `CREATE POLICY service_role_all_leads ON leads FOR ALL USING (true) WITH CHECK (true);` and identical policies for `payments`, `enrollments`, `classroom_enrollments`, `enrollment_jobs`, `payment_events`, and `outbox_jobs` omit `TO service_role`. In PostgreSQL/Supabase, omitting `TO <role>` defaults to `TO PUBLIC`.
+- **Exploitation:** Any client holding the Supabase public anonymous key (`anon`) can query PostgREST (`https://<project>.supabase.co/rest/v1/leads` or `payments`) to dump customer names, unmasked phone numbers, emails, and payment records, or tamper with rows directly.
+- **Suggested Fix:**
+  ```sql
+  -- Drop open public policies and restrict strictly to service_role:
+  DROP POLICY IF EXISTS service_role_all_leads ON leads;
+  CREATE POLICY service_role_all_leads ON leads TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS service_role_all_payments ON payments;
+  CREATE POLICY service_role_all_payments ON payments TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS service_role_all_enrollments ON enrollments;
+  CREATE POLICY service_role_all_enrollments ON enrollments TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS service_role_all_classroom ON classroom_enrollments;
+  CREATE POLICY service_role_all_classroom ON classroom_enrollments TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS service_role_all_jobs ON enrollment_jobs;
+  CREATE POLICY service_role_all_jobs ON enrollment_jobs TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS service_role_all_events ON payment_events;
+  CREATE POLICY service_role_all_events ON payment_events TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS service_role_all_outbox ON outbox_jobs;
+  CREATE POLICY service_role_all_outbox ON outbox_jobs TO service_role FOR ALL USING (true) WITH CHECK (true);
+  ```
 - **Confidence:** High
 
-#### [SEC-02] Unauthenticated Order Status Endpoint Returns GCR Link Without Phone Match
-- **File & Line:** `backend/src/services/leadService.ts:96-134`, `backend/src/routes/enrollmentRoutes.ts:98-100`
-- **What is wrong:** `GET /api/enrollment/status/:orderId` takes an unauthenticated Razorpay `orderId` in the URL. If the order is `PAID`, `leadService.getEnrollmentStatus` includes `classroomUrl: directClassroomUrl` (`env.GCR_LINK`) directly in the JSON response.
-- **Exploitation:** Anyone who discovers or guesses a Razorpay order ID (e.g., from browser network logs, shared receipts, or sequential generation) can query `GET /api/enrollment/status/:orderId` to immediately receive the Google Classroom join link without phone verification or join token verification.
-- **Suggested Fix:** Remove `classroomUrl` from `getEnrollmentStatus` response in `leadService.ts`. The Google Classroom link must ONLY be returned by `joinService.verify()` upon successful phone matching.
+#### [SEC-CRIT-02] Live Google Classroom Join Link Committed in Git History
+- **File & Line:** [`frontend/components/EnrollmentModal.tsx:59`](file:///d:/CCP/frontend/components/EnrollmentModal.tsx#L59), [`backend/src/services/joinService.ts:71`](file:///d:/CCP/backend/src/services/joinService.ts#L71) (Commits: `ce9ff91`, `8dc0435`)
+- **What is wrong:** The live Google Classroom join URL (`https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a`) was committed to git history across multiple commits before removal in `adb2a10`.
+- **Exploitation:** Anyone with read access to the GitHub repository can run `git log -S "435t7z2a"` to extract the invite code and join the Google Classroom course without paying.
+- **Suggested Fix:** Reset the invite code in Google Classroom settings. Ensure GitHub repo is set to Private.
 - **Confidence:** High
 
 ---
 
 ### High Severity
 
-#### [SEC-03] Overly Permissive CORS Policy Allows Arbitrary Vercel Deployments & Substrings
-- **File & Line:** `backend/src/app.ts:46-47`
-- **What is wrong:** CORS origin callback permits any origin where `cleanOrigin.endsWith('.vercel.app')` or `cleanOrigin.includes('superprofit.in')`.
-- **Exploitation:** Any third party can register a free account on Vercel (`attacker.vercel.app`) or register a domain containing `superprofit.in` (e.g., `superprofit.in.evil.com`) and make authenticated CORS requests with `credentials: true` to the backend.
-- **Suggested Fix:** Replace substring and wildcard matching with an exact whitelist array:
+#### [SEC-HIGH-01] Hardcoded Google Classroom Invite Code Fallback in Email Service
+- **File & Line:** [`backend/src/services/emailService.ts:40-41`](file:///d:/CCP/backend/src/services/emailService.ts#L40-L41)
+- **What is wrong:** `const code = env.GOOGLE_CLASSROOM_ENROLLMENT_CODE || 'u5d3zmob';` hardcodes an invite code fallback directly in server source code.
+- **Exploitation:** If deployed without setting `GOOGLE_CLASSROOM_ENROLLMENT_CODE`, students receive an email with direct access code `u5d3zmob`. Anyone inspecting the repository can use this code to join.
+- **Suggested Fix:**
   ```ts
-  const allowedOrigins = [
-    env.SITE_URL?.replace(/\/$/, ''),
-    env.FRONTEND_URL?.replace(/\/$/, ''),
-    'https://superprofit.in',
-    'https://www.superprofit.in',
-  ].filter(Boolean);
-  if (allowedOrigins.includes(cleanOrigin) || (env.NODE_ENV === 'development' && cleanOrigin.includes('localhost'))) {
-    return callback(null, true);
-  }
-  return callback(new Error('Blocked by CORS policy'));
-  ```
-- **Confidence:** High
-
-#### [SEC-04] Payment Verification Does Not Confirm Payment Capture Status With Razorpay API
-- **File & Line:** `backend/src/routes/paymentRoutes.ts:108-154`, `backend/src/routes/paymentRoutes.ts:185-224`
-- **What is wrong:** Both `/api/verify-payment` and `/api/payment/verify` only verify the HMAC cryptographic signature of `orderId|paymentId`. Neither route queries the Razorpay API (`razorpayService.fetchPayment(paymentId)`) to verify that the payment is in status `captured`.
-- **Exploitation:** If a transaction is authorized but auto-capture fails or is pending, or if an attacker supplies an authorized/refunded payment ID with a matching order signature, the system treats it as fully paid.
-- **Suggested Fix:** Fetch the payment from Razorpay API and enforce status `captured`:
-  ```ts
-  const payment = await razorpayService.fetchPayment(payment_id);
-  if (payment.status !== 'captured' && env.NODE_ENV !== 'test') {
-    return res.status(400).json({ verified: false, error: 'Payment not captured' });
+  const code = env.GOOGLE_CLASSROOM_ENROLLMENT_CODE;
+  if (!code) {
+    logger.warn('GOOGLE_CLASSROOM_ENROLLMENT_CODE not configured');
   }
   ```
 - **Confidence:** High
 
-#### [SEC-05] Supabase View `pending_joins` Lacks `security_invoker` and Permits Anon Reads
-- **File & Line:** `backend/migrations/005_join_sessions_reminder.sql:42-57`
-- **What is wrong:** The view `pending_joins` runs with owner privileges (`SECURITY DEFINER` default in Postgres) and bypasses RLS. In Supabase, newly created views in schema `public` grant `SELECT` to `anon` and `authenticated` roles by default.
-- **Exploitation:** Anyone with the public Supabase anon key can make a GET request to `https://<supabase-id>.supabase.co/rest/v1/pending_joins` and dump customer names, order IDs, timestamps, and partial phone numbers.
-- **Suggested Fix:** In `005_join_sessions_reminder.sql`, alter the view or add explicit revocations:
-  ```sql
-  ALTER VIEW pending_joins SET (security_invoker = true);
-  REVOKE ALL ON pending_joins FROM anon, authenticated;
-  GRANT SELECT ON pending_joins TO service_role;
+#### [SEC-HIGH-02] Unauthenticated Status Endpoint Discloses Unmasked Customer Email (IDOR)
+- **File & Line:** [`backend/src/services/leadService.ts:101-103`](file:///d:/CCP/backend/src/services/leadService.ts#L101-L103), [`backend/src/routes/enrollmentRoutes.ts:98-131`](file:///d:/CCP/backend/src/routes/enrollmentRoutes.ts#L98-L131)
+- **What is wrong:** `GET /api/enrollment/status/:orderId` requires no authentication or session token and returns `email: row.email_normalized` and `message: 'Invitation sent to ' + row.email_normalized` in plaintext.
+- **Exploitation:** An attacker discovering or scanning Razorpay order IDs can harvest customer email addresses.
+- **Suggested Fix:**
+  ```ts
+  // Return masked email instead of raw email:
+  import { maskEmail } from '../utils/logger.js';
+  return {
+    status: 'INVITED',
+    message: `Invitation sent to your Google account. Open Classroom and click Accept.`,
+    email: maskEmail(row.email_normalized),
+    orderId,
+  };
   ```
 - **Confidence:** High
 
-#### [SEC-06] Webhook Crashes Unrecoverably If Order Row Missing in DB
-- **File & Line:** `backend/src/services/enrollmentWorkflowService.ts:35-37`
-- **What is wrong:** `handlePaymentSuccess` executes:
+#### [SEC-HIGH-03] Plaintext GCR Link Logged to Standard Output in Simulated Email Mode
+- **File & Line:** [`backend/src/services/emailService.ts:47-50`](file:///d:/CCP/backend/src/services/emailService.ts#L47-L50)
+- **What is wrong:** `logger.info('SMTP not configured - simulated email dispatch', { email: toEmail, directUrl: directClassroomUrl });` logs `directUrl` (which contains `env.GCR_LINK`) to standard output.
+- **Exploitation:** Server logs captured by cloud log aggregators or viewable in monitoring consoles expose the Google Classroom join link.
+- **Suggested Fix:**
   ```ts
-  const lookupRes = await client.query(`SELECT id, lead_id FROM payments WHERE razorpay_order_id = $1`, [orderId]);
-  if (lookupRes.rows.length === 0) throw new Error(`Payment record not found for order: ${orderId}`);
+  logger.info('SMTP not configured - simulated email dispatch', {
+    email: toEmail,
+  });
   ```
-  If database insertion failed during `/api/enrollment/create-order` (which logs `Could not persist payment to DB, proceeding with checkout`), no `payments` row exists when the webhook arrives.
-- **Exploitation:** When the customer pays, Razorpay sends `order.paid` or `payment.captured`. The webhook crashes with a 500 error every time it retries. The customer is charged, but payment is never marked `PAID`, no invite is sent, and access is blocked.
-- **Suggested Fix:** In `handlePaymentSuccess`, if the payment row is missing, insert a synthetic lead and payment record using order details from the Razorpay API/webhook notes before processing.
 - **Confidence:** High
 
 ---
 
 ### Medium Severity
 
-#### [SEC-07] Table `enrollments` Missing Explicit RLS Enable Statement
-- **File & Line:** `backend/migrations/001_initial_schema.sql:194-200`
-- **What is wrong:** Migration 001 enables RLS on `leads`, `payments`, `payment_events`, `classroom_enrollments`, `enrollment_attempts`, `enrollment_jobs`, but misses `enrollments`.
-- **Exploitation:** If the `enrollments` table is exposed via PostgREST, anonymous clients could query enrolled student emails.
-- **Suggested Fix:** Add `ALTER TABLE enrollments ENABLE ROW LEVEL SECURITY;` to migrations.
+#### [SEC-MED-01] HTML / Script Injection via Unvalidated Name in Standard Create-Order Email
+- **File & Line:** [`backend/src/routes/paymentRoutes.ts:26-62`](file:///d:/CCP/backend/src/routes/paymentRoutes.ts#L26-L62), [`backend/src/services/emailService.ts:87`](file:///d:/CCP/backend/src/services/emailService.ts#L87)
+- **What is wrong:** Unlike `enrollmentRoutes.ts` which validates with Zod `createOrderSchema`, `paymentRoutes.post('/create-order')` accepts unvalidated `notes?.name` or `req.body?.name`. In `emailService.ts:87`, `Welcome, ${recipientName}!` interpolates the name raw into HTML email output without HTML escaping.
+- **Exploitation:** Attacker submitting HTML tags or script injection in `name` to `/api/create-order` injects arbitrary markup or phishing elements into confirmation emails.
+- **Suggested Fix:** Validate `req.body` using `createOrderSchema` in `paymentRoutes.ts` and sanitize/escape `recipientName` in `emailService.ts`.
 - **Confidence:** High
 
-#### [SEC-08] Unbounded Outbound HTTP Request in WhatsApp Service Without Timeout
-- **File & Line:** `backend/src/services/whatsappService.ts:98-100`
-- **What is wrong:** Outbound `fetch` call to WaAPI (`https://waapi.app/api/v1/...`) has no timeout signal (`AbortSignal.timeout(...)`).
-- **Exploitation:** If WaAPI stalls, rate-limits, or suffers an outage, outgoing webhook processing and background workers hang indefinitely on pending sockets, consuming server resources.
-- **Suggested Fix:** Add `signal: AbortSignal.timeout(10000)` to the fetch call.
-- **Confidence:** High
-
-#### [SEC-09] `/api/create-order` Accepts Client-Supplied Currency Without Whitelist Validation
-- **File & Line:** `backend/src/routes/paymentRoutes.ts:23`
-- **What is wrong:** `const currency = (req.body.currency || 'INR').toUpperCase();` trusts the client request body for `currency` without asserting it equals `env.COURSE_CURRENCY` (`INR`).
-- **Exploitation:** An attacker could submit an order with a non-INR currency if Razorpay account permits multiple currencies.
-- **Suggested Fix:** Force `const currency = env.COURSE_CURRENCY || 'INR';`.
+#### [SEC-MED-02] Plaintext Insecure HTTP Origins in Backend CORS Whitelist
+- **File & Line:** [`backend/src/app.ts:31-32`](file:///d:/CCP/backend/src/app.ts#L31-L32)
+- **What is wrong:** `allowedOrigins` includes plain unencrypted HTTP origins `'http://superprofit.in'` and `'http://www.superprofit.in'`.
+- **Exploitation:** An on-path network attacker on an unencrypted network can interact with CORS-protected endpoints.
+- **Suggested Fix:** Remove `http://` production origins from `allowedOrigins` in `app.ts`. Keep only `https://`.
 - **Confidence:** High
 
 ---
 
 ### Low Severity
 
-#### [SEC-10] Admin Job Route `POST /api/jobs/retry-invites` Lacks Route-Level Rate Limiter
-- **File & Line:** `backend/src/routes/jobRoutes.ts:21`
-- **What is wrong:** Protected by `x-job-secret` header, but lacks a strict rate limiter (relies only on `globalLimiter` allowing 1000 req/15min).
-- **Exploitation:** Enables brute-force enumeration of `x-job-secret` up to 1000 attempts per 15 minutes per IP.
-- **Suggested Fix:** Apply a dedicated limiter (e.g. max 10 requests per 15 minutes).
+#### [SEC-LOW-01] Missing Socket Timeout on Outbound Razorpay SDK Client
+- **File & Line:** [`backend/src/services/razorpayService.ts:14-19`](file:///d:/CCP/backend/src/services/razorpayService.ts#L14-L19)
+- **What is wrong:** The Razorpay SDK instance is created without an explicit request timeout parameter.
+- **Exploitation:** In the event of network degradation between Render and Razorpay, HTTP connections can hang until socket keepalive exhaustion.
+- **Suggested Fix:** Pass timeout options or configure `http.Agent` timeout.
 - **Confidence:** Medium
-
-#### [SEC-11] WhatsApp Retry Job Accumulates Unexpired Tokens Without Cleanup
-- **File & Line:** `backend/src/services/whatsappService.ts:89`
-- **What is wrong:** Each retry attempt calls `joinService.createToken()`, generating a new row in `join_tokens`. Old tokens are not invalidated.
-- **Exploitation:** If an invite retries 5 times, 5 active, unexpired tokens exist for the same order simultaneously.
-- **Suggested Fix:** Delete or expire previous unverified tokens for that order before creating a new one:
-  `UPDATE join_tokens SET expires_at = NOW() WHERE order_id = $1 AND expires_at > NOW();`
-- **Confidence:** High
 
 ---
 
 ## 4. Bugs (Logic & Reliability)
 
-### High Severity
+### Critical Severity
 
-#### [BUG-01] Polling Timeout in `EnrollmentModal.tsx` Hardcodes Stale Course ID and Falsely Reports Success
-- **File & Line:** `frontend/components/EnrollmentModal.tsx:299-306`
-- **What is wrong:** If status polling reaches `maxAttempts` (75 seconds), it executes:
+#### [BUG-CRIT-01] Fatal UUID Type Cast Error Swallows Welcome Email Outbox Enqueueing
+- **File & Line:** [`backend/src/services/enrollmentWorkflowService.ts:326-338`](file:///d:/CCP/backend/src/services/enrollmentWorkflowService.ts#L326-L338)
+- **What is wrong:**
   ```ts
-  if (attempts >= maxAttempts) {
-    clearInterval(interval);
-    setClassroomUrl("https://classroom.google.com/c/889084654883");
-    setModalState("SUCCESS");
-    setStatusMessage(`Invitation sent to ${formData.email}. Open Classroom and click Accept.`);
-  }
+  INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
+  VALUES (
+    (SELECT payment_id FROM enrollments WHERE user_id = $1 AND course_id = $2 LIMIT 1)::uuid,
+    'WELCOME_EMAIL', $3, 'PENDING'
+  )
   ```
-- **Effect:** Falsely informs the user that invitation succeeded, and sets the classroom link to a stale course ID (`889084654883`), leading the student to a non-existent or wrong course.
-- **Suggested Fix:** When polling times out, set `modalState("FAILED")` with a message instructing the user to check their email or contact support.
+  `enrollments.payment_id` stores `razorpay_payment_id` (a string such as `'pay_Q1w2e3r4'`), NOT a database UUID. Casting `'pay_Q1w2e3r4'::uuid` throws a fatal PostgreSQL error: `invalid input syntax for type uuid: "pay_Q1w2e3r4"`.
+- **Effect:** The error is caught by `catch (err) { logger.warn(...) }`. As a result, the `WELCOME_EMAIL` outbox job is NEVER inserted. No welcome emails are ever sent out.
+- **Trigger:** Any successful student Google Classroom enrollment.
+- **Suggested Fix:**
+  ```ts
+  await query(
+    `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
+     VALUES (
+       (SELECT id FROM payments WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 1),
+       'WELCOME_EMAIL', $2, 'PENDING'
+     ) ON CONFLICT DO NOTHING`,
+    [leadId, JSON.stringify({ toEmail: email, fullName, courseId })]
+  );
+  ```
 - **Confidence:** High
 
-#### [BUG-02] Website Checkout Fast-Path Completely Bypasses Join Page & Phone Verification
-- **File & Line:** `backend/src/routes/paymentRoutes.ts:148-154`, `frontend/components/EnrollmentModal.tsx:489-497`
-- **What is wrong:** `/api/verify-payment` does not mint a site join token or return `joinUrl`. Inside `EnrollmentModal.tsx`, upon signature verification, the modal immediately displays the Classroom button and sets state to `SUCCESS`.
-- **Effect:** The student on the website never experiences the `/join/[token]` verification page or phone number match that was requested. Only WhatsApp recipients go through phone verification.
-- **Suggested Fix:** In `/api/verify-payment`, mint a join token via `joinService.createToken(paid.paymentRowId, order_id, 'site')` and return `{ verified: true, joinUrl }`. The frontend modal should redirect the user to `joinUrl` upon payment completion.
+---
+
+### High Severity
+
+#### [BUG-HIGH-01] Missing Customer Phone in Payment Auto-Recovery Permanently Locks Out Buyer
+- **File & Line:** [`backend/src/services/enrollmentWorkflowService.ts:43-57`](file:///d:/CCP/backend/src/services/enrollmentWorkflowService.ts#L43-L57), [`backend/src/services/webhookService.ts:93-125`](file:///d:/CCP/backend/src/services/webhookService.ts#L93-L125)
+- **What is wrong:** When a webhook arrives before the order row exists (e.g. database latency during `create-order`), `handlePaymentSuccess` auto-recovers by creating a synthetic lead and payment row. However, `newLeadRes` sets `phone = ''`, and `newPaymentRes` leaves `customer_phone` NULL. Webhook handler never extracts or passes phone from `eventPayload.payload.payment.entity.contact`.
+- **Effect:** When the paid buyer visits `/join/[token]` and enters their mobile number, `paidPhone` is null. `joinService.verify()` permanently reports mismatch until the order is locked out. WhatsApp invite also crashes immediately with "Invalid or missing phone number".
+- **Trigger:** Webhook processes payment before `create-order` finishes inserting into DB.
+- **Suggested Fix:** Extract `customerPhone = paymentEntity?.contact || orderEntity?.notes?.phone` in `webhookService.ts` and pass to `handlePaymentSuccess` to populate `customer_phone`.
+- **Confidence:** High
+
+#### [BUG-HIGH-02] PaymentRoutes `/create-order` Fails to Persist `customer_phone` on Order Row
+- **File & Line:** [`backend/src/routes/paymentRoutes.ts:50-55`](file:///d:/CCP/backend/src/routes/paymentRoutes.ts#L50-L55)
+- **What is wrong:** `paymentRoutes.post('/create-order')` executes:
+  `INSERT INTO payments (lead_id, razorpay_order_id, amount, currency, status) VALUES ($1, $2, $3, $4, 'PENDING')`
+  It completely omits `customer_phone`.
+- **Effect:** If a customer checks out via this route (used by `RazorpayCheckoutButton.tsx` and as fallback in `EnrollmentModal.tsx`), `payments.customer_phone` is NULL. Verification must fall back to `leads.phone`. If the lead was already registered with an older phone number, the phone will mismatch.
+- **Trigger:** Orders created through `/api/create-order` or `/api/payment/create-order`.
+- **Suggested Fix:** Include `customer_phone` column and pass `toIndianMobile91(req.body.phone || notes?.phone)`.
 - **Confidence:** High
 
 ---
 
 ### Medium Severity
 
-#### [BUG-03] Confirmation Countdown Timer Resets If Student Re-Clicks "Open Classroom"
-- **File & Line:** `frontend/components/PendingJoinCard.tsx:93-96`
-- **What is wrong:** In `handleOpenClassroom`, `setSecondsLeft(CONFIRM_WAIT_SECONDS)` is called unconditionally on every click.
-- **Effect:** If a student opens Google Classroom, returns after 12 seconds, and clicks "Open Classroom" again to refresh the tab, their countdown timer is reset to 15 seconds, frustrating legitimate users.
-- **Suggested Fix:** Only set `secondsLeft` if `!hasOpened`:
-  ```ts
-  if (!hasOpened) {
-    setHasOpened(true);
-    setSecondsLeft(CONFIRM_WAIT_SECONDS);
+#### [BUG-MED-01] Modal Fails User UI on Transient 502 Gateway Error Instead of Polling
+- **File & Line:** [`frontend/components/EnrollmentModal.tsx:487-514`](file:///d:/CCP/frontend/components/EnrollmentModal.tsx#L487-L514)
+- **What is wrong:** In `EnrollmentModal.tsx`, if `/api/verify-payment` returns HTTP 502 (caused when Razorpay API payment lookup times out in `paymentRoutes.ts:148`), `verifyRes.ok` is false. The code jumps to `else { setModalState("FAILED"); }` instead of catching and invoking `pollEnrollmentStatus(orderData.orderId)`.
+- **Effect:** User sees a red "Payment Failed / Signature verification failed" error in their modal even though money was deducted and the payment will succeed via webhook.
+- **Trigger:** Transient timeout connecting to Razorpay API during fast-path verification.
+- **Suggested Fix:**
+  ```tsx
+  if (verifyRes.status >= 500) {
+    pollEnrollmentStatus(orderData.orderId);
+    return;
   }
   ```
 - **Confidence:** High
@@ -207,69 +229,92 @@ The following secret/access credential was committed to git history and exposed 
 
 ### Low Severity
 
-#### [BUG-04] Unhandled `localStorage.getItem` Exception In Private Browsing
-- **File & Line:** `frontend/app/join/[token]/JoinClient.tsx:62`
-- **What is wrong:** `localStorage.getItem("joinSession")` is called without a `try/catch` block inside the initial check effect.
-- **Effect:** If storage is disabled or restricted in private browsing mode or sandboxed webviews, `localStorage.getItem` throws a `SecurityError`, causing `check()` to catch and prematurely mark the token as `invalid`.
-- **Suggested Fix:** Wrap line 62 in a `try/catch` block or helper function.
+#### [BUG-LOW-01] Daily Reconciliation Job `DO NOTHING` Fails to Re-trigger Failed Outbox Jobs
+- **File & Line:** [`backend/scripts/reconciliationJob.ts:27`](file:///d:/CCP/backend/scripts/reconciliationJob.ts#L27)
+- **What is wrong:** `INSERT INTO outbox_jobs ... ON CONFLICT (payment_id, job_type) DO NOTHING`.
+- **Effect:** If an outbox job previously failed (`status = 'FAILED'`), running `reconciliationJob.ts` does nothing and leaves the job failed forever.
+- **Trigger:** Running `reconciliationJob.ts` on payments with failed outbox jobs.
+- **Suggested Fix:** Change to `ON CONFLICT (payment_id, job_type) DO UPDATE SET status = 'PENDING', attempts = 0, next_run_at = NOW()`.
 - **Confidence:** High
 
 ---
 
-## 5. Dependency Audit
+## 5. Checked and Fine
 
-### Backend (`backend/package.json`)
-- **`vitest` / `@vitest/mocker` / `tinypool` / `esbuild`:** 10 vulnerabilities reported (2 critical, 1 high, 7 moderate).
-  - *Risk Assessment:* These are development dependencies used strictly for running tests locally. They are **not** bundled into production or deployed to Render.
-  - *Action:* Run `npm update vitest` in development when convenient.
+The following core components, security controls, and flows were audited and verified to be properly implemented:
 
-### Frontend (`frontend/package.json`)
-- **`next@14.2.35`:** Multiple CVEs flagged (Server Component DoS, Cache Poisoning, Image Optimizer DoS).
-  - *Risk Assessment:* When deployed on Vercel, static page generation and edge routing mitigate many custom server vulnerabilities. However, updating to Next.js 14.2.x latest patch is advised.
-- **`tailwindcss` / `braces`:** High severity RegExp DoS in build-time tooling. Not reachable in production runtime.
-
----
-
-## 6. Checked & Verified Secure
-
-The following critical areas were rigorously checked and verified to be safe:
-
-1. **Secret Leakage in Git History:** Thorough regex search across all commits and branches confirmed that `RAZORPAY_KEY_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CLIENT_SECRET`, and `SMTP_PASS` have **never** been committed to git history.
-2. **Environment File Protection:** `.env`, `.env.local`, and `.env.*` are excluded in `.gitignore` and have never been committed. `.env.example` contains only harmless placeholders.
-3. **No Private Secrets in Browser Bundles:** `NEXT_PUBLIC_` variables are limited to `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_RAZORPAY_KEY_ID` (which is public by design).
-4. **Payment Amount Immutability:** Order creation on backend (`/api/create-order` and `/api/enrollment/create-order`) forces `env.COURSE_PRICE_PAISE` (349900 paise / ₹3,499). Client-provided amounts in request bodies are ignored.
-5. **HMAC Timing-Safe Signatures:** `crypto.timingSafeEqual` is properly utilized for both payment signature and webhook signature validation in `razorpayService.ts`.
-6. **SQL Injection Immunity:** All database queries in `backend/src/` use parameterized inputs (`$1`, `$2`, etc.). Zero raw string interpolation in SQL queries.
-7. **Join Token Security:** Join tokens and session tokens are generated with 256 bits of CSPRNG entropy (`crypto.randomBytes(32)`). Only SHA-256 hashes are persisted in the database.
-8. **Anti-Brute Force Lockout:** Phone verification queries lock the order row `FOR UPDATE` within a database transaction; 5 failed attempts trigger an automatic 60-minute lockout (`join_locked_until`).
-9. **SEO & Referrer Sanitization:** Join pages (`/join/[token]` and `/join/continue`) specify `robots: { index: false, follow: false }` and `referrer: "no-referrer"`, preventing token leakage via referrer headers.
+- **Payment Signature Verification:** Both `/verify-payment` and `/webhooks/razorpay` use `crypto.timingSafeEqual` over HMAC SHA-256 signatures. The raw body parser is applied specifically to webhook routes before JSON parsing.
+- **Server Price Enforcement:** Course price is strictly hardcoded from server environment `COURSE_PRICE_PAISE` (349900 paise = ₹3499) and currency `COURSE_CURRENCY` ('INR'). Webhooks verify amount matches `COURSE_PRICE_PAISE`.
+- **Webhook Idempotency:** The `payment_events` table enforces unique `event_id` constraints, ensuring duplicate webhook deliveries are safely identified and skipped.
+- **Token Security:** Join tokens and session tokens are 32 cryptographically random bytes generated via `crypto.randomBytes(32).toString('base64url')`. Only SHA-256 hashes are stored in the database.
+- **Atomic Verification Locks:** Phone verification uses PostgreSQL transaction locking (`FOR UPDATE OF p` on the payment row) to prevent race conditions across parallel requests attempting to bypass reveal limits or failed attempt counters.
+- **Client Storage Privacy:** Frontend `localStorage` only stores the opaque session token (`joinSession`), never the Google Classroom URL. All `localStorage` accesses are wrapped in `try/catch` to prevent private browsing crashes.
+- **Crawler & Referrer Protection:** Join routes `/join/[token]` and `/join/continue` explicitly set `robots: { index: false, follow: false }` and `referrer: "no-referrer"`.
+- **Proxy Configuration:** `app.set('trust proxy', 1)` is enabled in `app.ts`, ensuring rate limiters evaluate real client IPs behind Render's reverse proxy.
+- **External Links:** All target `_blank` anchor tags include `rel="noopener noreferrer"`.
+- **Build & Test Quality:** Full test suites pass cleanly (57 backend tests, 7 frontend tests), TypeScript checks pass without errors, and Next.js production builds complete successfully.
 
 ---
 
-## 7. Pre-Push Action Checklist
+## 6. Pre-Push Checklist
 
-Before pushing this repository to GitHub, execute the following steps:
+Before pushing this repository to GitHub, execute the following steps in order:
 
-- [ ] **Step 1: Rotate Google Classroom Invite Code**
-  - Open Google Classroom -> Settings -> General -> Invite code -> Click **Reset**.
-  - Copy new invite link and update `GCR_LINK` in backend Render dashboard and local `.env`.
-- [ ] **Step 2: Clean Hardcoded Link from Code**
-  - In `frontend/components/EnrollmentModal.tsx`, remove `DEFAULT_GCR_URL` and stale course ID `889084654883`.
-  - In `backend/src/services/joinService.ts`, remove hardcoded fallback `ODkxODYwMDQwMzQw` / `435t7z2a`.
-- [ ] **Step 3: Restrict `GET /api/enrollment/status/:orderId`**
-  - Remove `classroomUrl` from `leadService.ts:106, 125, 134`.
-- [ ] **Step 4: Tighten CORS in `backend/src/app.ts`**
-  - Remove `.endsWith('.vercel.app')` and `.includes('superprofit.in')`. Whitelist explicit origins only.
-- [ ] **Step 5: Secure Database View `pending_joins`**
-  - Run in Supabase SQL editor:
-    ```sql
-    ALTER VIEW pending_joins SET (security_invoker = true);
-    REVOKE ALL ON pending_joins FROM anon, authenticated;
-    ```
-- [ ] **Step 6: Remove Extraneous Root Files**
-  - Delete `server.js` and `schema.sql` from the repository root (they contain redundant, out-of-sync logic).
-- [ ] **Step 7: GitHub Repository Settings**
-  - Ensure the repository is set to **Private** unless intentionally public.
-  - In GitHub repo Settings -> **Code security and analysis**:
-    - Enable **Secret scanning**.
-    - Enable **Push protection**.
+### 1. Rotate Credentials in Google Classroom
+- [ ] Open Google Classroom -> Settings -> General -> Invite codes -> Click **Reset**.
+- [ ] Copy the new Classroom invite code and update `GCR_LINK` and `GOOGLE_CLASSROOM_ENROLLMENT_CODE` in Render backend environment variables.
+
+### 2. Apply Database Migration for RLS Lockdown
+Run the following SQL in Supabase SQL Editor to revoke open public policies:
+```sql
+DROP POLICY IF EXISTS service_role_all_leads ON leads;
+CREATE POLICY service_role_all_leads ON leads TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS service_role_all_payments ON payments;
+CREATE POLICY service_role_all_payments ON payments TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS service_role_all_enrollments ON enrollments;
+CREATE POLICY service_role_all_enrollments ON enrollments TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS service_role_all_classroom ON classroom_enrollments;
+CREATE POLICY service_role_all_classroom ON classroom_enrollments TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS service_role_all_jobs ON enrollment_jobs;
+CREATE POLICY service_role_all_jobs ON enrollment_jobs TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS service_role_all_events ON payment_events;
+CREATE POLICY service_role_all_events ON payment_events TO service_role FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS service_role_all_outbox ON outbox_jobs;
+CREATE POLICY service_role_all_outbox ON outbox_jobs TO service_role FOR ALL USING (true) WITH CHECK (true);
+```
+
+### 3. Repository Configuration on GitHub
+- [ ] Ensure repository visibility is set to **Private**.
+- [ ] On GitHub, navigate to **Settings -> Code security and analysis**:
+  - Enable **Secret scanning**.
+  - Enable **Push protection** (blocks accidental commits containing API keys).
+
+### 4. Setup External Cron for WhatsApp Retry Job
+- [ ] In Render (or external cron provider), create a Cron Job calling:
+  ```bash
+  curl -X POST https://your-backend.onrender.com/api/jobs/retry-invites \
+    -H "x-job-secret: YOUR_JOB_SECRET"
+  ```
+  Schedule: Every 5 or 10 minutes.
+
+### 5. Final Local Verification Commands
+```powershell
+# 1. Verify clean git working tree
+git status
+
+# 2. Run backend test suite
+cd d:\CCP\backend
+npm test
+npm run build
+
+# 3. Run frontend test suite
+cd d:\CCP\frontend
+npm test
+npm run build
+```
