@@ -503,6 +503,10 @@ export default function EnrollmentModal() {
                 "Payment verified! Please join the Google Classroom below to complete your enrollment."
               );
               return;
+            } else if (verifyRes.status >= 500) {
+              console.warn("Fast-path verify returned 5xx, falling back to polling", verifyRes.status);
+              pollEnrollmentStatus(orderData.orderId);
+              return;
             } else {
               setModalState("FAILED");
               setStatusMessage(
