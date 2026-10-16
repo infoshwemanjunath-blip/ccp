@@ -56,8 +56,7 @@ export default function EnrollmentModal() {
   }>({});
   const [statusMessage, setStatusMessage] = useState("");
   const [orderId, setOrderId] = useState<string | null>(null);
-  const DEFAULT_GCR_URL = "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a";
-  const [classroomUrl, setClassroomUrl] = useState<string>(DEFAULT_GCR_URL);
+  const [classroomUrl, setClassroomUrl] = useState<string>("");
   const [hasClickedClassroom, setHasClickedClassroom] = useState<boolean>(false);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [newGoogleEmail, setNewGoogleEmail] = useState<string>("");
@@ -493,7 +492,7 @@ export default function EnrollmentModal() {
                 } catch {}
               }
               const directClassroom =
-                verifyData.classroomUrl || DEFAULT_GCR_URL;
+                verifyData.classroomUrl || "";
               setClassroomUrl(directClassroom);
               setModalState("SUCCESS");
               setStatusMessage(
@@ -846,7 +845,7 @@ export default function EnrollmentModal() {
 
             <div className="space-y-3 pt-2">
               <a
-                href={classroomUrl || DEFAULT_GCR_URL}
+                href={classroomUrl || "https://classroom.google.com"}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setHasClickedClassroom(true)}

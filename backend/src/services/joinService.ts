@@ -64,12 +64,11 @@ export class JoinService {
    * Return configured or fallback Google Classroom URL.
    */
   getGcrLink(): string {
-    return (
-      env.GCR_LINK ||
-      (env.GOOGLE_CLASSROOM_COURSE_ID
-        ? `https://classroom.google.com/c/${env.GOOGLE_CLASSROOM_COURSE_ID}?cjc=${env.GOOGLE_CLASSROOM_ENROLLMENT_CODE || '435t7z2a'}`
-        : 'https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a')
-    );
+    if (env.GCR_LINK) return env.GCR_LINK;
+    if (env.GOOGLE_CLASSROOM_COURSE_ID && env.GOOGLE_CLASSROOM_ENROLLMENT_CODE) {
+      return `https://classroom.google.com/c/${env.GOOGLE_CLASSROOM_COURSE_ID}?cjc=${env.GOOGLE_CLASSROOM_ENROLLMENT_CODE}`;
+    }
+    return 'https://classroom.google.com';
   }
 
   /**
