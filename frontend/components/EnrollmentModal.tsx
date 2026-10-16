@@ -15,6 +15,8 @@ import {
   ArrowLeft,
   ExternalLink,
 } from "lucide-react";
+import { loadRazorpayScript } from "@/lib/razorpay";
+import { isValidIndianMobile } from "@/lib/phone";
 
 declare global {
   interface Window {
@@ -46,16 +48,18 @@ export default function EnrollmentModal() {
     name: "",
     phone: "",
     email: "",
+    whatsappConsent: true,
   });
   const [validationErrors, setValidationErrors] = useState<{
     name?: string;
     phone?: string;
     email?: string;
+    whatsappConsent?: string;
   }>({});
   const [statusMessage, setStatusMessage] = useState("");
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [classroomUrl, setClassroomUrl] = useState<string>("https://classroom.google.com");
-  const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const DEFAULT_GCR_URL = "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a";
+  const [classroomUrl, setClassroomUrl] = useState<string>(DEFAULT_GCR_URL);
   const [newGoogleEmail, setNewGoogleEmail] = useState<string>("");
   const [updateEmailSubmitting, setUpdateEmailSubmitting] = useState<boolean>(false);
   const [updateEmailError, setUpdateEmailError] = useState<string>("");
@@ -148,42 +152,25 @@ export default function EnrollmentModal() {
     };
   }, [isOpen]);
 
-  // Load Razorpay Checkout script dynamically
-  const loadRazorpayScript = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (typeof window !== "undefined" && window.Razorpay) {
-        return resolve(true);
-      }
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.async = true;
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
   // Frontend input validation
   const validateForm = (): boolean => {
-    const errors: { name?: string; phone?: string; email?: string } = {};
+    const errors: { name?: string; phone?: string; email?: string; whatsappConsent?: string } = {};
 
     if (!formData.name.trim() || formData.name.trim().length < 2) {
       errors.name = "Full Name must be at least 2 characters.";
     }
 
-    const cleanedPhone = formData.phone.replace(/[\s\-\(\)\+]/g, "");
-    const normalizedPhone =
-      cleanedPhone.startsWith("91") && cleanedPhone.length === 12
-        ? cleanedPhone.slice(2)
-        : cleanedPhone;
-
-    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
-      errors.phone = "Enter a valid 10-digit Indian mobile number.";
+    if (!isValidIndianMobile(formData.phone)) {
+      errors.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9876543210).";
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.email.trim() || !emailRegex.test(formData.email.trim())) {
-      errors.email = "Enter a valid Google Account email.";
+      errors.email = "Enter a valid email address.";
+    }
+
+    if (!formData.whatsappConsent) {
+      errors.whatsappConsent = "You must agree to receive course updates on WhatsApp to proceed.";
     }
 
     setValidationErrors(errors);
@@ -250,10 +237,10 @@ export default function EnrollmentModal() {
 
       if (attempts >= maxAttempts) {
         clearInterval(interval);
-        setClassroomUrl("https://classroom.google.com/c/889084654883");
+        setClassroomUrl(DEFAULT_GCR_URL);
         setModalState("SUCCESS");
         setStatusMessage(
-          `Invitation sent to ${formData.email}. Open Classroom and click Accept.`
+          `Invitation sent to ${formData.email}. Click below to enter Google Classroom.`
         );
       }
     }, 2500);
@@ -341,7 +328,7 @@ export default function EnrollmentModal() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            amount: 349900,
+            amount: 100,
             currency: "INR",
             receipt: `rcpt_${Date.now()}`,
             notes: {
@@ -439,10 +426,16 @@ export default function EnrollmentModal() {
             const verifyData = await verifyRes.json().catch(() => ({}));
 
             if (verifyRes.ok && (verifyData.verified || verifyData.success)) {
+              const directClassroom =
+                verifyData.classroomUrl || DEFAULT_GCR_URL;
+              setClassroomUrl(directClassroom);
               setModalState("SUCCESS");
               setStatusMessage(
-                "Payment verified successfully! Your course invitation has been sent to your Google account."
+                "Payment verified! Redirecting to Google Classroom..."
               );
+              setTimeout(() => {
+                window.location.href = directClassroom;
+              }, 1000);
               return;
             } else {
               setModalState("FAILED");
@@ -640,6 +633,29 @@ export default function EnrollmentModal() {
               </p>
             </div>
 
+            {/* WhatsApp Consent Checkbox (Required) */}
+            <div className="pt-1">
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  id="whatsapp-consent-checkbox"
+                  checked={formData.whatsappConsent}
+                  onChange={(e) =>
+                    setFormData({ ...formData, whatsappConsent: e.target.checked })
+                  }
+                  className="mt-0.5 h-4 w-4 rounded border-peach-300 text-deepGreen-950 focus:ring-deepGreen-900 cursor-pointer accent-deepGreen-950"
+                />
+                <span className="text-xs text-brandText-secondary leading-snug">
+                  I agree to receive course updates on WhatsApp
+                </span>
+              </label>
+              {validationErrors.whatsappConsent && (
+                <p className="text-red-600 text-xs mt-1">
+                  {validationErrors.whatsappConsent}
+                </p>
+              )}
+            </div>
+
             {/* Submit Button */}
             <div className="pt-2">
               <p className="text-center text-xs font-bold uppercase tracking-wider text-deepGreen-900 mb-2">
@@ -741,7 +757,7 @@ export default function EnrollmentModal() {
 
             <div className="space-y-2">
               <a
-                href={classroomUrl || "https://classroom.google.com/c/889084654883"}
+                href={classroomUrl || DEFAULT_GCR_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-1.5 w-full py-3.5 px-6 rounded-full bg-deepGreen-950 text-white font-semibold text-sm shadow-md hover:bg-deepGreen-900 transition-colors"
