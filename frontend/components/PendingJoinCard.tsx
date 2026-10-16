@@ -91,8 +91,10 @@ export default function PendingJoinCard({
 
   // Handle clicking "Open Classroom"
   const handleOpenClassroom = useCallback(async () => {
-    setHasOpened(true);
-    setSecondsLeft(CONFIRM_WAIT_SECONDS);
+    if (!hasOpened) {
+      setHasOpened(true);
+      setSecondsLeft(CONFIRM_WAIT_SECONDS);
+    }
     setConfirmError("");
 
     // Notify backend that classroom link was opened
