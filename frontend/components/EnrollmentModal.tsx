@@ -485,6 +485,11 @@ export default function EnrollmentModal() {
             const verifyData = await verifyRes.json().catch(() => ({}));
 
             if (verifyRes.ok && (verifyData.verified || verifyData.success)) {
+              if (verifyData.joinUrl) {
+                window.location.href = verifyData.joinUrl;
+                return;
+              }
+
               if (verifyData.sessionToken) {
                 try {
                   localStorage.setItem("joinSession", verifyData.sessionToken);
