@@ -297,10 +297,9 @@ export default function EnrollmentModal() {
 
       if (attempts >= maxAttempts) {
         clearInterval(interval);
-        setClassroomUrl("https://classroom.google.com/c/889084654883");
-        setModalState("SUCCESS");
+        setModalState("FAILED");
         setStatusMessage(
-          `Invitation sent to ${formData.email}. Open Classroom and click Accept.`
+          `Verification is taking longer than expected. Please check your WhatsApp or email for your personal join invitation, or contact support.`
         );
       }
     }, 2500);
