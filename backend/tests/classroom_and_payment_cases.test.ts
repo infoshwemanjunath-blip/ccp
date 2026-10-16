@@ -9,6 +9,7 @@ import { enrollmentWorkflowService } from '../src/services/enrollmentWorkflowSer
 import { leadService } from '../src/services/leadService.js';
 import { webhookService } from '../src/services/webhookService.js';
 import { env } from '../src/config/env.js';
+import { joinService } from '../src/services/joinService.js';
 
 describe('Required Test Cases - Google Classroom & Payment Flow', () => {
   beforeEach(() => {
@@ -352,11 +353,11 @@ describe('Required Test Cases - Google Classroom & Payment Flow', () => {
   it('CASE 9: Direct routes should redirect straight into class without codes', async () => {
     const authRes = await request(app).get('/api/enrollment/google-auth');
     expect(authRes.status).toBe(302);
-    expect(authRes.header.location).toBe(`https://classroom.google.com/c/${env.GOOGLE_CLASSROOM_COURSE_ID}`);
+    expect(authRes.header.location).toBe(joinService.getGcrLink());
 
     const callbackRes = await request(app).get('/api/enrollment/google-callback');
     expect(callbackRes.status).toBe(302);
-    expect(callbackRes.header.location).toBe(`https://classroom.google.com/c/${env.GOOGLE_CLASSROOM_COURSE_ID}`);
+    expect(callbackRes.header.location).toBe(joinService.getGcrLink());
   });
 
 

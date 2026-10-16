@@ -28,6 +28,11 @@ export default function PendingJoinCard({
   onConfirmed,
 }: PendingJoinCardProps) {
   const [hasOpened, setHasOpened] = useState(false);
+  const effectiveGcrLink =
+    gcrLink && gcrLink !== "https://classroom.google.com"
+      ? gcrLink
+      : process.env.NEXT_PUBLIC_GCR_LINK ||
+        "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a";
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [highlightConfirm, setHighlightConfirm] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -173,7 +178,7 @@ export default function PendingJoinCard({
 
         <div className="pt-2 space-y-3">
           <a
-            href={gcrLink}
+            href={effectiveGcrLink}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full py-4 px-6 rounded-full bg-deepGreen-950 hover:bg-deepGreen-900 text-white font-semibold text-base shadow-luxury hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -215,7 +220,7 @@ export default function PendingJoinCard({
       {/* Action 1: Open Classroom */}
       <div className="space-y-2">
         <a
-          href={gcrLink}
+          href={effectiveGcrLink}
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleOpenClassroom}

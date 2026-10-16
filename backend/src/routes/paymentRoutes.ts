@@ -191,12 +191,16 @@ paymentRouter.post('/verify-payment', verifyLimiter, async (req: Request, res: R
       logger.error('Failed to process payment success enrollment', err);
     }
 
+    const gcrLink = joinService.getGcrLink();
+
     return res.status(200).json({
       verified: true,
       success: true,
       message: 'Payment verified successfully.',
       order_id,
       payment_id,
+      classroomUrl: gcrLink,
+      gcrLink,
       ...(joinUrl && { joinUrl }),
     });
   } catch (error: any) {
@@ -295,9 +299,13 @@ paymentRouter.post('/verify', verifyLimiter, async (req: Request, res: Response)
       });
     }
 
+    const gcrLink = joinService.getGcrLink();
+
     return res.status(200).json({
       verified: true,
       message: 'Payment verified. Enrollment is being activated.',
+      classroomUrl: gcrLink,
+      gcrLink,
       ...(joinUrl && { joinUrl }),
     });
   } catch (error: any) {

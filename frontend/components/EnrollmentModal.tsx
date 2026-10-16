@@ -260,9 +260,11 @@ export default function EnrollmentModal() {
             data.classroomUrl
           ) {
             clearInterval(interval);
-            if (data.classroomUrl) {
-              setClassroomUrl(data.classroomUrl);
-            }
+            const resolvedClassroom =
+              data.classroomUrl ||
+              process.env.NEXT_PUBLIC_GCR_LINK ||
+              "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a";
+            setClassroomUrl(resolvedClassroom);
             setModalState("SUCCESS");
             setStatusMessage(
               data.message ||
@@ -496,7 +498,10 @@ export default function EnrollmentModal() {
                 } catch {}
               }
               const directClassroom =
-                verifyData.classroomUrl || "";
+                verifyData.classroomUrl ||
+                verifyData.gcrLink ||
+                process.env.NEXT_PUBLIC_GCR_LINK ||
+                "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a";
               setClassroomUrl(directClassroom);
               setModalState("SUCCESS");
               setStatusMessage(
@@ -853,7 +858,11 @@ export default function EnrollmentModal() {
 
             <div className="space-y-3 pt-2">
               <a
-                href={classroomUrl || "https://classroom.google.com"}
+                href={
+                  classroomUrl ||
+                  process.env.NEXT_PUBLIC_GCR_LINK ||
+                  "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a"
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setHasClickedClassroom(true)}

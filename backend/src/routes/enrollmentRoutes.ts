@@ -8,6 +8,7 @@ import { orderLimiter } from '../middleware/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { query } from '../db/pool.js';
+import { joinService } from '../services/joinService.js';
 
 export const enrollmentRouter = Router();
 
@@ -105,7 +106,11 @@ enrollmentRouter.get('/status/:orderId', async (req: Request, res: Response) => 
     try {
       const status = await leadService.getStatusByOrderId(orderId);
       if (status) {
-        return res.status(200).json(status);
+        const isEnrolledOrInvited = status.status === 'INVITED' || status.status === 'ENROLLED' || status.status === 'ENROLLMENT_SUCCESS';
+        return res.status(200).json({
+          ...status,
+          ...(isEnrolledOrInvited && { classroomUrl: joinService.getGcrLink() }),
+        });
       }
     } catch (err) {
       logger.error('Database error during status lookup', err);
@@ -167,8 +172,7 @@ enrollmentRouter.post('/update-google-email', async (req: Request, res: Response
  * Redirects student directly to Google Classroom course page
  */
 enrollmentRouter.get('/google-auth', async (req: Request, res: Response) => {
-  const courseId = env.GOOGLE_CLASSROOM_COURSE_ID;
-  return res.redirect(`https://classroom.google.com/c/${courseId}`);
+  return res.redirect(joinService.getGcrLink());
 });
 
 /**
@@ -176,8 +180,7 @@ enrollmentRouter.get('/google-auth', async (req: Request, res: Response) => {
  * Redirects student directly to Google Classroom course page
  */
 enrollmentRouter.get('/google-callback', async (req: Request, res: Response) => {
-  const courseId = env.GOOGLE_CLASSROOM_COURSE_ID;
-  return res.redirect(`https://classroom.google.com/c/${courseId}`);
+  return res.redirect(joinService.getGcrLink());
 });
 
 

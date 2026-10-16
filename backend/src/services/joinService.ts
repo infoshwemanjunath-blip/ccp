@@ -68,7 +68,7 @@ export class JoinService {
     if (env.GOOGLE_CLASSROOM_COURSE_ID && env.GOOGLE_CLASSROOM_ENROLLMENT_CODE) {
       return `https://classroom.google.com/c/${env.GOOGLE_CLASSROOM_COURSE_ID}?cjc=${env.GOOGLE_CLASSROOM_ENROLLMENT_CODE}`;
     }
-    return 'https://classroom.google.com';
+    return 'https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a';
   }
 
   /**
