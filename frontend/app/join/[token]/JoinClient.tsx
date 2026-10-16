@@ -59,9 +59,9 @@ export default function JoinClient({ token }: JoinClientProps) {
 
           // If token is valid, check if current browser already has a pending session
           if (data.state === "valid") {
-            const existingSession = localStorage.getItem("joinSession");
-            if (existingSession) {
-              try {
+            try {
+              const existingSession = localStorage.getItem("joinSession");
+              if (existingSession) {
                 const statusRes = await fetch(`${backendUrl}/api/join/status`, {
                   headers: { Authorization: `Bearer ${existingSession}` },
                 });
@@ -75,11 +75,13 @@ export default function JoinClient({ token }: JoinClientProps) {
                     }
                   } else if (statusData.state === "joined") {
                     setTokenState("joined");
-                    localStorage.removeItem("joinSession");
+                    try {
+                      localStorage.removeItem("joinSession");
+                    } catch { }
                   }
                 }
-              } catch { }
-            }
+              }
+            } catch { }
           }
         } else {
           setTokenState("invalid");
