@@ -106,7 +106,7 @@ enrollmentRouter.get('/status/:orderId', async (req: Request, res: Response) => 
     try {
       const status = await leadService.getStatusByOrderId(orderId);
       if (status) {
-        const isEnrolledOrInvited = status.status === 'INVITED' || status.status === 'ENROLLED' || status.status === 'ENROLLMENT_SUCCESS';
+        const isEnrolledOrInvited = status.status === 'INVITED' || status.status === 'ENROLLMENT_SUCCESS';
         return res.status(200).json({
           ...status,
           ...(isEnrolledOrInvited && { classroomUrl: joinService.getGcrLink() }),
