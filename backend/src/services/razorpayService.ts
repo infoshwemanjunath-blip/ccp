@@ -19,11 +19,17 @@ export class RazorpayService {
     return this.razorpayInstance;
   }
 
-  private async withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelayMs = 200): Promise<T> {
+  private async withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelayMs = 200, timeoutMs = 10000): Promise<T> {
     let lastError: any;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        return await fn();
+        let timer: NodeJS.Timeout;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Razorpay request timeout')), timeoutMs);
+        });
+        const result = await Promise.race([fn(), timeoutPromise]);
+        clearTimeout(timer!);
+        return result;
       } catch (err: any) {
         lastError = err;
         const statusCode = err?.statusCode || err?.status_code || err?.status;
