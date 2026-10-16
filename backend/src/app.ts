@@ -43,9 +43,7 @@ app.use(
       const cleanOrigin = origin.replace(/\/$/, '');
       if (
         allowedOrigins.includes(cleanOrigin) ||
-        cleanOrigin.endsWith('.vercel.app') ||
-        cleanOrigin.includes('superprofit.in') ||
-        env.NODE_ENV === 'development'
+        (env.NODE_ENV === 'development' && (cleanOrigin.includes('localhost') || cleanOrigin.includes('127.0.0.1')))
       ) {
         return callback(null, true);
       }
