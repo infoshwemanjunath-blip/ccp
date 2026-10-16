@@ -4,6 +4,7 @@ import { googleClassroomService } from './googleClassroomService.js';
 import { emailService } from './emailService.js';
 import { razorpayService } from './razorpayService.js';
 import { logger } from '../utils/logger.js';
+import { toIndianMobile91 } from '../utils/validation.js';
 import { LeadRecord, ClassroomEnrollmentRecord } from '../types/index.js';
 
 export class EnrollmentWorkflowService {
@@ -15,7 +16,8 @@ export class EnrollmentWorkflowService {
     paymentId: string,
     paidAt: Date = new Date(),
     fallbackEmail?: string,
-    fallbackName?: string
+    fallbackName?: string,
+    fallbackPhone?: string
   ): Promise<{ transitioned: boolean }> {
     logger.info('Processing authoritative payment success', { orderId, paymentId });
 
@@ -34,6 +36,7 @@ export class EnrollmentWorkflowService {
 
           let internalPaymentId: string;
           let leadId: string;
+          const safePhone = fallbackPhone ? toIndianMobile91(fallbackPhone) || fallbackPhone : '';
 
           if (lookupRes.rows.length === 0) {
             logger.warn('Payment record missing on webhook success, auto-recovering record', { orderId, paymentId });
@@ -42,23 +45,30 @@ export class EnrollmentWorkflowService {
 
             const newLeadRes = await client.query(
               `INSERT INTO leads (full_name, phone, email, email_normalized, payment_status, enrollment_status)
-               VALUES ($1, '', $2, $3, 'PENDING', 'PENDING')
+               VALUES ($1, $2, $3, $4, 'PENDING', 'PENDING')
                RETURNING id`,
-              [safeName, safeEmail, safeEmail]
+              [safeName, safePhone, safeEmail, safeEmail]
             );
             leadId = newLeadRes.rows[0].id;
 
             const newPaymentRes = await client.query(
-              `INSERT INTO payments (lead_id, razorpay_order_id, razorpay_payment_id, amount, currency, status)
-               VALUES ($1, $2, $3, $4, $5, 'PENDING')
-               ON CONFLICT (razorpay_order_id) DO UPDATE SET razorpay_payment_id = EXCLUDED.razorpay_payment_id
+              `INSERT INTO payments (lead_id, razorpay_order_id, razorpay_payment_id, amount, currency, status, customer_phone)
+               VALUES ($1, $2, $3, $4, $5, 'PENDING', $6)
+               ON CONFLICT (razorpay_order_id) DO UPDATE SET razorpay_payment_id = EXCLUDED.razorpay_payment_id, customer_phone = COALESCE(payments.customer_phone, EXCLUDED.customer_phone)
                RETURNING id, lead_id`,
-              [leadId, orderId, paymentId, env.COURSE_PRICE_PAISE, env.COURSE_CURRENCY]
+              [leadId, orderId, paymentId, env.COURSE_PRICE_PAISE, env.COURSE_CURRENCY, safePhone || null]
             );
             internalPaymentId = newPaymentRes.rows[0].id;
           } else {
             internalPaymentId = lookupRes.rows[0].id;
             leadId = lookupRes.rows[0].lead_id;
+
+            if (safePhone) {
+              await client.query(
+                `UPDATE payments SET customer_phone = COALESCE(customer_phone, $1) WHERE id = $2`,
+                [safePhone, internalPaymentId]
+              );
+            }
           }
 
           // 2. Lock leads
@@ -180,9 +190,12 @@ export class EnrollmentWorkflowService {
   async markPaid(
     orderId: string,
     paymentId: string,
-    paidAt: Date = new Date()
+    paidAt: Date = new Date(),
+    fallbackEmail?: string,
+    fallbackName?: string,
+    fallbackPhone?: string
   ): Promise<{ transitioned: boolean; paymentRowId: string | null; isPaid: boolean }> {
-    const { transitioned } = await this.handlePaymentSuccess(orderId, paymentId, paidAt);
+    const { transitioned } = await this.handlePaymentSuccess(orderId, paymentId, paidAt, fallbackEmail, fallbackName, fallbackPhone);
     const res = await query(`SELECT id, status FROM payments WHERE razorpay_order_id = $1`, [orderId]);
     const row = res.rows[0];
     return {

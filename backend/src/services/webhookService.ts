@@ -90,12 +90,14 @@ export class WebhookService {
               logger.error('Webhook amount mismatch', { orderId, expectedAmount, actualAmount: orderEntity.amount });
               throw new Error('Amount mismatch');
             }
+            const customerPhone = paymentEntity?.contact || orderEntity?.notes?.phone || paymentEntity?.notes?.phone;
             await enrollmentWorkflowService.handlePaymentSuccess(
               orderId,
               paymentId,
               paidAt,
               paymentEntity?.email || orderEntity?.notes?.email,
-              paymentEntity?.notes?.name || orderEntity?.notes?.name
+              paymentEntity?.notes?.name || orderEntity?.notes?.name,
+              customerPhone
             );
           }
           break;
@@ -116,7 +118,15 @@ export class WebhookService {
               logger.error('Webhook amount mismatch', { orderId, expectedAmount, actualAmount: paymentEntity.amount });
               throw new Error('Amount mismatch');
             }
-            const paid = await enrollmentWorkflowService.markPaid(orderId, paymentId, paidAt);
+            const customerPhone = paymentEntity?.contact || paymentEntity?.notes?.phone;
+            const paid = await enrollmentWorkflowService.markPaid(
+              orderId,
+              paymentId,
+              paidAt,
+              paymentEntity?.email || paymentEntity?.notes?.email,
+              paymentEntity?.notes?.name,
+              customerPhone
+            );
             // Backup path: send WhatsApp join link (fire-and-forget, after DB update)
             if (paid.isPaid && paid.paymentRowId) {
               whatsappService.queueFirstInvite(paid.paymentRowId);
