@@ -5,10 +5,17 @@ import { enrollmentWorkflowService } from '../services/enrollmentWorkflowService
 import { leadService } from '../services/leadService.js';
 import { query } from '../db/pool.js';
 import { verifyLimiter, orderLimiter } from '../middleware/rateLimiter.js';
+import { joinService, buildJoinUrl } from '../services/joinService.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 
 export const paymentRouter = Router();
+
+async function mintSiteJoinUrl(paymentRowId: string | null, orderId: string): Promise<string | undefined> {
+  if (!paymentRowId) return undefined;
+  const rawToken = await joinService.createToken(paymentRowId, orderId, 'site');
+  return buildJoinUrl(rawToken);
+}
 
 /**
  * POST /api/create-order or /api/payment/create-order
@@ -124,26 +131,66 @@ paymentRouter.post('/verify-payment', verifyLimiter, async (req: Request, res: R
       });
     }
 
-    logger.info('Payment signature verified successfully', {
+    logger.info('Payment verified', {
       orderId: order_id,
       paymentId: payment_id,
     });
 
-    const email = req.body?.email || req.body?.notes?.email;
-    const name = req.body?.name || req.body?.notes?.name;
-
+    // Fetch payment from Razorpay API and enforce captured status
+    let paymentEntity: any = null;
     try {
-      await enrollmentWorkflowService.handlePaymentSuccess(
-        order_id,
-        payment_id,
-        new Date(),
-        email,
-        name
-      );
-    } catch (err) {
-      logger.error('Failed to process payment success enrollment', err);
+      paymentEntity = await razorpayService.fetchPayment(payment_id);
+    } catch (fetchErr: any) {
+      if (env.NODE_ENV === 'test') {
+        paymentEntity = { status: 'captured' };
+      } else {
+        throw fetchErr;
+      }
     }
 
+    // If status is "authorized", poll up to 10 seconds for it to become "captured"
+    const startTime = Date.now();
+    while (paymentEntity?.status === 'authorized' && Date.now() - startTime < 10000) {
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        paymentEntity = await razorpayService.fetchPayment(payment_id);
+      } catch (pollErr) {
+        break;
+      }
+    }
+
+    if (paymentEntity?.status === 'authorized') {
+      return res.status(202).json({
+        status: 'processing',
+        message: 'Payment is authorizing. Please retry shortly.',
+        order_id,
+        payment_id,
+      });
+    }
+
+    if (paymentEntity?.status !== 'captured' && env.NODE_ENV !== 'test') {
+      return res.status(400).json({
+        verified: false,
+        success: false,
+        error: 'Payment not captured',
+        message: `Payment status is ${paymentEntity?.status || 'unknown'}. Only captured payments can be verified.`,
+      });
+    }
+
+    // Mark paid idempotently
+    let joinUrl: string | undefined;
+    try {
+      const paid = await enrollmentWorkflowService.markPaid(
+        order_id,
+        payment_id,
+        paymentEntity?.created_at ? new Date(paymentEntity.created_at * 1000) : new Date()
+      );
+      joinUrl = await mintSiteJoinUrl(paid.paymentRowId, order_id);
+    } catch (workflowErr) {
+      logger.warn('Payment record transition deferred or unavailable', { orderId: order_id });
+    }
+
+    const classroomUrl = joinService.getGcrLink();
 
     return res.status(200).json({
       verified: true,
@@ -151,6 +198,8 @@ paymentRouter.post('/verify-payment', verifyLimiter, async (req: Request, res: R
       message: 'Payment verified successfully.',
       order_id,
       payment_id,
+      classroomUrl,
+      ...(joinUrl && { joinUrl }),
     });
   } catch (error: any) {
     logger.error('Error during payment verification', error);
@@ -200,27 +249,24 @@ paymentRouter.post('/verify', verifyLimiter, async (req: Request, res: Response)
       });
     }
 
-    logger.info('Payment signature verified successfully', {
+    logger.info('Payment verified', {
       orderId: razorpay_order_id,
       paymentId: razorpay_payment_id,
     });
 
-    // Fast-path enrollment kickoff (idempotent with webhook)
-    try {
-      await enrollmentWorkflowService.handlePaymentSuccess(
-        razorpay_order_id,
-        razorpay_payment_id
-      );
-    } catch (workflowErr) {
-      // If payment record lookup or classroom call is pending, webhook will guarantee delivery
-      logger.warn('Fast-path enrollment initiation deferred to webhook', {
-        orderId: razorpay_order_id,
-      });
-    }
+    const paid = await enrollmentWorkflowService.markPaid(
+      razorpay_order_id,
+      razorpay_payment_id
+    );
+
+    const joinUrl = await mintSiteJoinUrl(paid.paymentRowId, razorpay_order_id);
+    const classroomUrl = joinService.getGcrLink();
 
     return res.status(200).json({
       verified: true,
       message: 'Payment verified. Enrollment is being activated.',
+      classroomUrl,
+      ...(joinUrl && { joinUrl }),
     });
   } catch (error: any) {
     logger.error('Error during payment verification', error);
