@@ -119,7 +119,7 @@ export default function BonusesSection() {
           
           <div className="flex flex-col items-center justify-center mb-8 gap-4">
             <div className="text-4xl font-extrabold text-deepGreen-950 font-serif">
-              ₹1
+              ₹3,499
             </div>
           </div>
           

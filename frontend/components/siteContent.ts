@@ -79,7 +79,7 @@ export const siteContent: SiteContent = {
     badgeText: "Limited time offer",
     description: "full course + 5 Bonuses included",
     originalPrice: "₹9,999",
-    currentPrice: "₹1",
+    currentPrice: "₹3,499",
   },
   youtubeUrl: "https://youtu.be/7YzDPbLp2Rk?si=8hgVhuK87bZr3eKF",
   logo: "/client-logo.png",

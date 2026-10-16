@@ -389,7 +389,7 @@ export default function EnrollmentModal() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            amount: 100,
+            amount: 349900,
             currency: "INR",
             receipt: `rcpt_${Date.now()}`,
             notes: {
@@ -608,7 +608,7 @@ export default function EnrollmentModal() {
             Join Super Profit Masterclass
           </h3>
           <p className="text-brandText-muted text-xs sm:text-sm mt-1">
-            Lifetime Access • 13 Modules • 5 Free Bonuses • ₹1
+            Lifetime Access • 13 Modules • 5 Free Bonuses • ₹3,499
           </p>
         </div>
 
@@ -760,7 +760,7 @@ export default function EnrollmentModal() {
                   </>
                 ) : (
                   <>
-                    <span>Proceed to Secure Pay (₹1)</span>
+                    <span>Proceed to Secure Pay (₹3,499)</span>
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </>
                 )}
