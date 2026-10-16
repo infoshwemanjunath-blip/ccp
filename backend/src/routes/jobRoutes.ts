@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { env } from '../config/env.js';
 import { whatsappService } from '../services/whatsappService.js';
+import { jobLimiter } from '../middleware/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 
 export const jobRouter = Router();
@@ -18,7 +19,7 @@ function verifyJobSecret(reqSecret: string | undefined): boolean {
  * POST /api/jobs/retry-invites or POST /jobs/retry-invites
  * Header: x-job-secret matching JOB_SECRET
  */
-jobRouter.post('/retry-invites', async (req: Request, res: Response) => {
+jobRouter.post('/retry-invites', jobLimiter, async (req: Request, res: Response) => {
   const secretHeader = (req.headers['x-job-secret'] as string) || '';
 
   if (!verifyJobSecret(secretHeader)) {

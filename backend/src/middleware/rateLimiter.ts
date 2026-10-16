@@ -80,3 +80,14 @@ export const joinConfirmLimiter = rateLimit({
   },
 });
 
+export const jobLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many job execution requests, please try again shortly',
+  },
+});
+
+
