@@ -15,8 +15,6 @@ import {
   ArrowLeft,
   ExternalLink,
 } from "lucide-react";
-import { loadRazorpayScript } from "@/lib/razorpay";
-import { isValidIndianMobile } from "@/lib/phone";
 
 declare global {
   interface Window {
@@ -60,6 +58,8 @@ export default function EnrollmentModal() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const DEFAULT_GCR_URL = "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a";
   const [classroomUrl, setClassroomUrl] = useState<string>(DEFAULT_GCR_URL);
+  const [hasClickedClassroom, setHasClickedClassroom] = useState<boolean>(false);
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [newGoogleEmail, setNewGoogleEmail] = useState<string>("");
   const [updateEmailSubmitting, setUpdateEmailSubmitting] = useState<boolean>(false);
   const [updateEmailError, setUpdateEmailError] = useState<string>("");
@@ -68,6 +68,10 @@ export default function EnrollmentModal() {
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
   const handleClose = useCallback(() => {
+    // Cannot close or quit until classroom is opened when payment is successful
+    if (modalState === "SUCCESS" && !hasClickedClassroom) {
+      return;
+    }
     setIsOpen(false);
     if (typeof window !== "undefined") {
       if (window.history.state?.modal === "enrollment") {
@@ -80,7 +84,7 @@ export default function EnrollmentModal() {
         );
       }
     }
-  }, []);
+  }, [modalState, hasClickedClassroom]);
 
   const handleOpen = useCallback(() => {
     setIsOpen(true);
@@ -118,8 +122,41 @@ export default function EnrollmentModal() {
   }, [handleOpen]);
 
   // Handle browser back button (popstate) and Escape key
+  // Lock page and modal when payment is successful until customer clicks Open Classroom
+  useEffect(() => {
+    if (modalState !== "SUCCESS" || hasClickedClassroom) return;
+
+    // Prevent browser tab/window close or reload
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+
+    // Prevent browser Back button (push history state and force modal to stay open)
+    window.history.pushState({ modal: "enrollment", paid: true }, "", "#enroll");
+    const handlePopState = () => {
+      window.history.pushState({ modal: "enrollment", paid: true }, "", "#enroll");
+      setIsOpen(true);
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [modalState, hasClickedClassroom]);
+
+  // Handle browser back button (popstate) and Escape key when not locked
   useEffect(() => {
     const handlePopState = () => {
+      if (modalState === "SUCCESS" && !hasClickedClassroom) {
+        window.history.pushState({ modal: "enrollment", paid: true }, "", "#enroll");
+        setIsOpen(true);
+        return;
+      }
       if (typeof window !== "undefined" && window.location.hash !== "#enroll") {
         setIsOpen(false);
       }
@@ -127,6 +164,7 @@ export default function EnrollmentModal() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (modalState === "SUCCESS" && !hasClickedClassroom) return;
         handleClose();
       }
     };
@@ -138,7 +176,7 @@ export default function EnrollmentModal() {
       window.removeEventListener("popstate", handlePopState);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [handleClose]);
+  }, [handleClose, modalState, hasClickedClassroom]);
 
   // Prevent background scrolling when modal is open
   useEffect(() => {
@@ -152,6 +190,21 @@ export default function EnrollmentModal() {
     };
   }, [isOpen]);
 
+  // Load Razorpay Checkout script dynamically
+  const loadRazorpayScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (typeof window !== "undefined" && window.Razorpay) {
+        return resolve(true);
+      }
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
   // Frontend input validation
   const validateForm = (): boolean => {
     const errors: { name?: string; phone?: string; email?: string; whatsappConsent?: string } = {};
@@ -160,7 +213,15 @@ export default function EnrollmentModal() {
       errors.name = "Full Name must be at least 2 characters.";
     }
 
-    if (!isValidIndianMobile(formData.phone)) {
+    const cleanedPhone = formData.phone.replace(/[\s\-\(\)\+]/g, "");
+    const normalizedPhone =
+      cleanedPhone.startsWith("91") && cleanedPhone.length === 12
+        ? cleanedPhone.slice(2)
+        : cleanedPhone.startsWith("0") && cleanedPhone.length === 11
+          ? cleanedPhone.slice(1)
+          : cleanedPhone;
+
+    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
       errors.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9876543210).";
     }
 
@@ -237,10 +298,10 @@ export default function EnrollmentModal() {
 
       if (attempts >= maxAttempts) {
         clearInterval(interval);
-        setClassroomUrl(DEFAULT_GCR_URL);
+        setClassroomUrl("https://classroom.google.com/c/889084654883");
         setModalState("SUCCESS");
         setStatusMessage(
-          `Invitation sent to ${formData.email}. Click below to enter Google Classroom.`
+          `Invitation sent to ${formData.email}. Open Classroom and click Accept.`
         );
       }
     }, 2500);
@@ -426,16 +487,18 @@ export default function EnrollmentModal() {
             const verifyData = await verifyRes.json().catch(() => ({}));
 
             if (verifyRes.ok && (verifyData.verified || verifyData.success)) {
+              if (verifyData.sessionToken) {
+                try {
+                  localStorage.setItem("joinSession", verifyData.sessionToken);
+                } catch {}
+              }
               const directClassroom =
                 verifyData.classroomUrl || DEFAULT_GCR_URL;
               setClassroomUrl(directClassroom);
               setModalState("SUCCESS");
               setStatusMessage(
-                "Payment verified! Redirecting to Google Classroom..."
+                "Payment verified! Please join the Google Classroom below to complete your enrollment."
               );
-              setTimeout(() => {
-                window.location.href = directClassroom;
-              }, 1000);
               return;
             } else {
               setModalState("FAILED");
@@ -478,37 +541,49 @@ export default function EnrollmentModal() {
   return (
     <div
       onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
+        if (e.target === e.currentTarget) {
+          if (modalState === "SUCCESS" && !hasClickedClassroom) return;
+          handleClose();
+        }
       }}
       className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-16 pb-8 px-3 sm:p-4 bg-deepGreen-950/75 backdrop-blur-sm overflow-y-auto animate-fade-in"
     >
       <div className="relative w-full max-w-lg my-auto max-h-[85vh] sm:max-h-[90vh] overflow-y-auto bg-cream-50 border border-peach-200 rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-8">
         {/* Sticky Top Navigation Header with Back and Close options */}
         <div className="sticky -top-5 sm:-top-8 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-4 pb-3 mb-4 bg-cream-50/95 backdrop-blur-md z-30 flex items-center justify-between border-b border-peach-200 shadow-sm">
-          <button
-            id="modal-back-btn"
-            type="button"
-            onClick={handleClose}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-deepGreen-950 bg-peach-200 hover:bg-peach-300 border border-peach-300 transition-all shadow-sm cursor-pointer active:scale-95"
-            aria-label="Back to overview"
-          >
-            <ArrowLeft className="w-4 h-4 text-deepGreen-950" />
-            <span>Back</span>
-          </button>
+          {!(modalState === "SUCCESS" && !hasClickedClassroom) ? (
+            <button
+              id="modal-back-btn"
+              type="button"
+              onClick={handleClose}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-deepGreen-950 bg-peach-200 hover:bg-peach-300 border border-peach-300 transition-all shadow-sm cursor-pointer active:scale-95"
+              aria-label="Back to overview"
+            >
+              <ArrowLeft className="w-4 h-4 text-deepGreen-950" />
+              <span>Back</span>
+            </button>
+          ) : (
+            <div className="text-[11px] sm:text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1 rounded-full animate-pulse flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-700" />
+              <span>Action Required</span>
+            </div>
+          )}
 
           <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-deepGreen-900 bg-peach-100/80 px-2.5 py-1 rounded-full border border-peach-200">
-            Secure Checkout
+            {modalState === "SUCCESS" ? "Classroom Enrollment" : "Secure Checkout"}
           </span>
 
-          <button
-            id="modal-close-x-btn"
-            type="button"
-            onClick={handleClose}
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-deepGreen-950 bg-peach-200 hover:bg-peach-300 border border-peach-300 transition-all shadow-sm cursor-pointer active:scale-95"
-            aria-label="Close modal"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {!(modalState === "SUCCESS" && !hasClickedClassroom) && (
+            <button
+              id="modal-close-x-btn"
+              type="button"
+              onClick={handleClose}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-deepGreen-950 bg-peach-200 hover:bg-peach-300 border border-peach-300 transition-all shadow-sm cursor-pointer active:scale-95"
+              aria-label="Close modal"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Modal Header */}
@@ -529,10 +604,10 @@ export default function EnrollmentModal() {
         {statusMessage && (
           <div
             className={`mb-5 p-3.5 rounded-xl text-xs sm:text-sm flex items-start gap-2.5 ${modalState === "FAILED"
-                ? "bg-red-50 text-red-800 border border-red-200"
-                : modalState === "ALREADY_ENROLLED"
-                  ? "bg-blue-50 text-blue-900 border border-blue-200"
-                  : "bg-peach-100 text-deepGreen-950 border border-peach-300"
+              ? "bg-red-50 text-red-800 border border-red-200"
+              : modalState === "ALREADY_ENROLLED"
+                ? "bg-blue-50 text-blue-900 border border-blue-200"
+                : "bg-peach-100 text-deepGreen-950 border border-peach-300"
               }`}
           >
             {modalState === "FAILED" ? (
@@ -730,18 +805,32 @@ export default function EnrollmentModal() {
               <CheckCircle className="w-9 h-9" />
             </div>
             <h4 className="text-2xl font-bold font-serif text-deepGreen-950">
-              Enrollment Confirmed!
+              Payment Successful!
             </h4>
             <p className="text-sm text-brandText-secondary leading-relaxed max-w-md mx-auto">
-              Invitation sent to{" "}
-              <strong className="text-deepGreen-950 underline">
-                {formData.email}
-              </strong>
-              .
+              Welcome to the course, <strong className="text-deepGreen-950">{formData.name || "Student"}</strong>!
             </p>
 
+            {/* Non-dismissible Warning until Classroom is opened */}
+            {!hasClickedClassroom ? (
+              <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-left text-xs sm:text-sm text-amber-950 space-y-1.5 shadow-sm">
+                <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                  <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>Please join the Classroom to complete your enrollment.</span>
+                </div>
+                <p className="text-amber-900/90 leading-relaxed text-xs">
+                  Click the button below to open Google Classroom in a new tab. You cannot exit this page until you open the classroom.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3.5 text-left text-xs text-emerald-950 flex items-center gap-2 shadow-sm">
+                <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>Classroom opened in new tab! You can now close or return to overview anytime.</span>
+              </div>
+            )}
+
             <div className="bg-cream-100 border border-peach-200 rounded-2xl p-4 text-left text-xs text-brandText-secondary space-y-2">
-              <p className="font-semibold text-deepGreen-900">Instruction:</p>
+              <p className="font-semibold text-deepGreen-900">Next Step:</p>
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-900 font-medium text-sm">
                 Open Classroom and click <strong>Accept</strong>.
               </div>
@@ -755,24 +844,32 @@ export default function EnrollmentModal() {
               </ul>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3 pt-2">
               <a
                 href={classroomUrl || DEFAULT_GCR_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 w-full py-3.5 px-6 rounded-full bg-deepGreen-950 text-white font-semibold text-sm shadow-md hover:bg-deepGreen-900 transition-colors"
+                onClick={() => setHasClickedClassroom(true)}
+                id="modal-open-classroom-btn"
+                className="inline-flex items-center justify-center gap-2 w-full py-4 px-6 rounded-full bg-deepGreen-950 hover:bg-deepGreen-900 text-white font-bold text-base shadow-luxury hover:shadow-xl transition-all cursor-pointer ring-4 ring-peach-300/60"
               >
-                Open Classroom <ExternalLink className="w-4 h-4" />
+                <span>Open Google Classroom</span>
+                <ExternalLink className="w-4 h-4" />
               </a>
 
-
-              <button
-                id="modal-success-done-btn"
-                onClick={handleClose}
-                className="w-full py-2.5 px-6 rounded-full text-brandText-muted font-medium text-xs hover:text-deepGreen-950 transition-colors"
-              >
-                Done
-              </button>
+              {hasClickedClassroom ? (
+                <button
+                  id="modal-success-done-btn"
+                  onClick={handleClose}
+                  className="w-full py-3 px-6 rounded-full bg-peach-200 hover:bg-peach-300 border border-peach-300 text-deepGreen-950 font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  Done (I've opened the Classroom)
+                </button>
+              ) : (
+                <p className="text-[11px] text-amber-800 font-medium">
+                  🔒 Tab and page navigation locked until you click Open Google Classroom.
+                </p>
+              )}
             </div>
           </div>
         )}
