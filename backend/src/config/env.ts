@@ -26,7 +26,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().default(''),
   GOOGLE_REFRESH_TOKEN: z.string().default(''),
   GOOGLE_CLASSROOM_COURSE_ID: z.string().default(''),
-  GOOGLE_CLASSROOM_ENROLLMENT_CODE: z.string().default('u5d3zmob'),
+  GOOGLE_CLASSROOM_ENROLLMENT_CODE: z.string().default(''),
   GOOGLE_REDIRECT_URI: z.string().default('http://localhost:5000/api/enrollment/google-callback'),
 
   // Feature Flags
@@ -43,6 +43,29 @@ const envSchema = z.object({
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
   EMAIL_FROM: z.string().default('Super Profit <support@superprofit.app>'),
+
+  // Supabase (optional here: DB access goes through DATABASE_URL / pg pool)
+  SUPABASE_URL: z.string().default(''),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
+
+  // Personal join page (phone-matched GCR link reveal) & join sessions
+  GCR_LINK: z.string().default(''),
+  SITE_URL: z.string().default(''),
+  JOIN_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  MAX_REVEALS: z.coerce.number().int().positive().default(3),
+  CONFIRM_MIN_SECONDS: z.coerce.number().int().nonnegative().default(15),
+  JOIN_SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  MAX_SESSIONS_PER_ORDER: z.coerce.number().int().positive().default(3),
+
+  // WhatsApp (WaAPI)
+  SEND_WHATSAPP: z
+    .preprocess((val) => (val === undefined || val === '' ? true : val === 'true' || val === true), z.boolean())
+    .default(true),
+  WAAPI_TOKEN: z.string().default(''),
+  WAAPI_INSTANCE_ID: z.string().default(''),
+
+  // Protects POST /api/jobs/retry-invites
+  JOB_SECRET: z.string().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -53,3 +76,15 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+/**
+ * Browser origins allowed by CORS. SITE_URL may be comma-separated
+ * (e.g. "https://superprofit.in,https://www.superprofit.in"); the first entry is the
+ * canonical base used for join links. Falls back to the existing FRONTEND_URL.
+ */
+export const siteOrigins: string[] = (env.SITE_URL || env.FRONTEND_URL)
+  .split(',')
+  .map((u) => u.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+export const siteUrl: string = siteOrigins[0] || '';

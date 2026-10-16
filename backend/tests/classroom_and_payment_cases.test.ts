@@ -82,7 +82,7 @@ describe('Required Test Cases - Google Classroom & Payment Flow', () => {
 
     const status = await leadService.getStatusByOrderId('order_succ_1');
     expect(status?.status).toBe('INVITED');
-    expect(status?.classroomUrl).toBe('https://classroom.google.com/c/889084654883');
+    expect(status?.classroomUrl).toBe('https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a');
     expect(status?.message).toContain('Open Classroom and click Accept');
   });
 

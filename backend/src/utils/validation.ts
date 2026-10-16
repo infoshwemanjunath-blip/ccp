@@ -26,6 +26,18 @@ export function isValidIndianPhone(phone: string): boolean {
   return /^[6-9]\d{9}$/.test(normalized);
 }
 
+/**
+ * Normalize any Indian mobile input to "91XXXXXXXXXX" (WhatsApp/E.164 digits without '+').
+ * Accepts "98765 43210", "+91 98765-43210", "09876543210", "919876543210".
+ * Returns null for anything that is not a valid Indian mobile number.
+ */
+export function toIndianMobile91(input: unknown): string | null {
+  let digits = String(input ?? '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  if (digits.length === 10) digits = `91${digits}`;
+  return /^91[6-9]\d{9}$/.test(digits) ? digits : null;
+}
+
 export const createOrderSchema = z.object({
   name: z
     .string({ required_error: 'Name is required' })
@@ -64,6 +76,23 @@ export const updateGoogleEmailSchema = z.object({
     .transform(normalizeEmail),
 });
 
+export const joinVerifySchema = z.object({
+  token: z.string().trim().min(20).max(128),
+  name: z
+    .string({ required_error: 'Name is required' })
+    .trim()
+    .min(2, 'Name must be at least 2 characters')
+    .max(100, 'Name must not exceed 100 characters'),
+  email: z
+    .string({ required_error: 'Email is required' })
+    .trim()
+    .email('Invalid email syntax')
+    .max(255)
+    .transform(normalizeEmail),
+  phone: z.string({ required_error: 'Phone number is required' }).trim().max(20),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
 export type UpdateGoogleEmailInput = z.infer<typeof updateGoogleEmailSchema>;
+export type JoinVerifyInput = z.infer<typeof joinVerifySchema>;

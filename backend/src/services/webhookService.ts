@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { query, withTransaction } from '../db/pool.js';
 import { razorpayService } from './razorpayService.js';
 import { enrollmentWorkflowService } from './enrollmentWorkflowService.js';
+import { whatsappService } from './whatsappService.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 
@@ -17,7 +18,7 @@ export class WebhookService {
     // 1. Signature Verification
     const isValid = razorpayService.verifyWebhookSignature(rawBody, signature);
     if (!isValid) {
-      logger.warn('Rejected Razorpay webhook with invalid signature');
+      logger.warn('Razorpay webhook signature failed');
       throw new Error('Invalid webhook signature');
     }
 
@@ -109,7 +110,11 @@ export class WebhookService {
               logger.error('Webhook amount mismatch', { orderId, expectedAmount, actualAmount: paymentEntity.amount });
               throw new Error('Amount mismatch');
             }
-            await enrollmentWorkflowService.handlePaymentSuccess(orderId, paymentId, paidAt);
+            const paid = await enrollmentWorkflowService.markPaid(orderId, paymentId, paidAt);
+            // Backup path: send WhatsApp join link (fire-and-forget, after DB update)
+            if (paid.isPaid && paid.paymentRowId) {
+              whatsappService.queueFirstInvite(paid.paymentRowId);
+            }
           }
           break;
         }

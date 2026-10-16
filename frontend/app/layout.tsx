@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import Script from "next/script";
+import PendingJoinBanner from "@/components/PendingJoinBanner";
 import "./globals.css";
 
 const playfair = Playfair_Display({
@@ -42,6 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
       <body className="min-h-screen bg-cream-100 text-brandText-primary antialiased flex flex-col">
+        <PendingJoinBanner />
         {children}
         <Script
           src="https://checkout.razorpay.com/v1/checkout.js"

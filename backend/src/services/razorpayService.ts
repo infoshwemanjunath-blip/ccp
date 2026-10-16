@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { query } from '../db/pool.js';
 import { LeadRecord, CheckoutOrderResponse } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { toIndianMobile91 } from '../utils/validation.js';
 
 export class RazorpayService {
   private razorpayInstance: Razorpay | null = null;
@@ -68,6 +69,14 @@ export class RazorpayService {
   }
 
   /**
+   * Fetch payment from Razorpay API (authoritative status: created/authorized/captured/failed/refunded)
+   */
+  async fetchPayment(paymentId: string): Promise<any> {
+    const client = this.getClient();
+    return this.withRetry(() => client.payments.fetch(paymentId));
+  }
+
+  /**
    * Create Razorpay order server-side and record in payments table
    */
   async createOrder(lead: LeadRecord): Promise<CheckoutOrderResponse> {
@@ -80,13 +89,18 @@ export class RazorpayService {
       const existingRes = await query(
         `SELECT razorpay_order_id, amount, currency 
          FROM payments 
-         WHERE lead_id = $1 AND status = 'PENDING' AND created_at > NOW() - INTERVAL '15 minutes'
+         WHERE lead_id = $1 AND amount = $2 AND status = 'PENDING' AND created_at > NOW() - INTERVAL '15 minutes'
          ORDER BY created_at DESC LIMIT 1`,
-        [lead.id]
+        [lead.id, amount]
       );
 
       if (existingRes.rows.length > 0) {
         const existing = existingRes.rows[0];
+        // Keep the paid-phone snapshot in sync with the latest form submission
+        await query(
+          `UPDATE payments SET customer_phone = $1 WHERE razorpay_order_id = $2 AND status = 'PENDING'`,
+          [toIndianMobile91(lead.phone), existing.razorpay_order_id]
+        );
         logger.info('Reusing existing pending Razorpay order', { leadId: lead.id, orderId: existing.razorpay_order_id });
         return {
           orderId: existing.razorpay_order_id,
@@ -115,10 +129,10 @@ export class RazorpayService {
     // Record order in payments table (graceful if DB offline)
     try {
       await query(
-        `INSERT INTO payments (lead_id, razorpay_order_id, amount, currency, status)
-         VALUES ($1, $2, $3, $4, 'PENDING')
+        `INSERT INTO payments (lead_id, razorpay_order_id, amount, currency, status, customer_phone)
+         VALUES ($1, $2, $3, $4, 'PENDING', $5)
          ON CONFLICT (razorpay_order_id) DO NOTHING`,
-        [lead.id, order.id, amount, currency]
+        [lead.id, order.id, amount, currency, toIndianMobile91(lead.phone)]
       );
     } catch (dbErr) {
       logger.warn('Could not persist payment to DB, proceeding with checkout', {

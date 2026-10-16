@@ -1,6 +1,9 @@
 .vercel
 .env
 .env.*
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 .env.local
 node_modules
 dist
@@ -11,4 +14,3 @@ dist
 .gsd
 adapters
 *.tsbuildinfo
-backend\.env.example

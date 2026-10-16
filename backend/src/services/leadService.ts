@@ -92,7 +92,8 @@ export class LeadService {
 
     if (row.payment_status === 'PAID') {
       const courseId = row.course_id || env.GOOGLE_CLASSROOM_COURSE_ID;
-      const directClassroomUrl = `https://classroom.google.com/c/${courseId}`;
+      const code = env.GOOGLE_CLASSROOM_ENROLLMENT_CODE || 'u5d3zmob';
+      const directClassroomUrl = env.GCR_LINK || `https://classroom.google.com/c/${courseId}?cjc=${code}`;
 
       if (
         row.classroom_status === 'ENROLLED' ||

@@ -389,7 +389,7 @@ export default function EnrollmentModal() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            amount: 100,
+            amount: 349900,
             currency: "INR",
             receipt: `rcpt_${Date.now()}`,
             notes: {

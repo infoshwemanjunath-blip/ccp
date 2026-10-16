@@ -15,7 +15,6 @@ import {
   Phone,
 } from "lucide-react";
 import PendingJoinCard from "@/components/PendingJoinCard";
-import { isValidIndianMobile } from "@/lib/phone";
 
 type TokenState = "loading" | "valid" | "expired" | "invalid" | "locked" | "joined";
 
@@ -79,7 +78,7 @@ export default function JoinClient({ token }: JoinClientProps) {
                     localStorage.removeItem("joinSession");
                   }
                 }
-              } catch {}
+              } catch { }
             }
           }
         } else {
@@ -107,7 +106,15 @@ export default function JoinClient({ token }: JoinClientProps) {
       errors.email = "Please enter a valid email address.";
     }
 
-    if (!isValidIndianMobile(formData.phone)) {
+    const cleanedPhone = formData.phone.replace(/[\s\-\(\)\+]/g, "");
+    const normalizedPhone =
+      cleanedPhone.startsWith("91") && cleanedPhone.length === 12
+        ? cleanedPhone.slice(2)
+        : cleanedPhone.startsWith("0") && cleanedPhone.length === 11
+          ? cleanedPhone.slice(1)
+          : cleanedPhone;
+
+    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
       errors.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9876543210).";
     }
 
@@ -140,7 +147,7 @@ export default function JoinClient({ token }: JoinClientProps) {
         if (data.sessionToken) {
           try {
             localStorage.setItem("joinSession", data.sessionToken);
-          } catch {}
+          } catch { }
           setSessionToken(data.sessionToken);
         }
         setGcrLink(data.gcrLink);
@@ -371,9 +378,8 @@ export default function JoinClient({ token }: JoinClientProps) {
                       onChange={(e) =>
                         setFormData((p) => ({ ...p, name: e.target.value }))
                       }
-                      className={`w-full py-2.5 px-3.5 pl-10 rounded-xl bg-white border text-sm text-deepGreen-950 focus:outline-none focus:ring-2 focus:ring-deepGreen-800/20 transition-all ${
-                        formErrors.name ? "border-red-400" : "border-peach-300"
-                      }`}
+                      className={`w-full py-2.5 px-3.5 pl-10 rounded-xl bg-white border text-sm text-deepGreen-950 focus:outline-none focus:ring-2 focus:ring-deepGreen-800/20 transition-all ${formErrors.name ? "border-red-400" : "border-peach-300"
+                        }`}
                     />
                     <User className="w-4 h-4 text-brandText-muted absolute left-3.5 top-3" />
                   </div>
@@ -396,9 +402,8 @@ export default function JoinClient({ token }: JoinClientProps) {
                       onChange={(e) =>
                         setFormData((p) => ({ ...p, email: e.target.value }))
                       }
-                      className={`w-full py-2.5 px-3.5 pl-10 rounded-xl bg-white border text-sm text-deepGreen-950 focus:outline-none focus:ring-2 focus:ring-deepGreen-800/20 transition-all ${
-                        formErrors.email ? "border-red-400" : "border-peach-300"
-                      }`}
+                      className={`w-full py-2.5 px-3.5 pl-10 rounded-xl bg-white border text-sm text-deepGreen-950 focus:outline-none focus:ring-2 focus:ring-deepGreen-800/20 transition-all ${formErrors.email ? "border-red-400" : "border-peach-300"
+                        }`}
                     />
                     <Mail className="w-4 h-4 text-brandText-muted absolute left-3.5 top-3" />
                   </div>
@@ -421,9 +426,8 @@ export default function JoinClient({ token }: JoinClientProps) {
                       onChange={(e) =>
                         setFormData((p) => ({ ...p, phone: e.target.value }))
                       }
-                      className={`w-full py-2.5 px-3.5 pl-10 rounded-xl bg-white border text-sm text-deepGreen-950 focus:outline-none focus:ring-2 focus:ring-deepGreen-800/20 transition-all ${
-                        formErrors.phone ? "border-red-400" : "border-peach-300"
-                      }`}
+                      className={`w-full py-2.5 px-3.5 pl-10 rounded-xl bg-white border text-sm text-deepGreen-950 focus:outline-none focus:ring-2 focus:ring-deepGreen-800/20 transition-all ${formErrors.phone ? "border-red-400" : "border-peach-300"
+                        }`}
                     />
                     <Phone className="w-4 h-4 text-brandText-muted absolute left-3.5 top-3" />
                   </div>

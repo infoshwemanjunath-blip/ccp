@@ -59,7 +59,9 @@ export class EnrollmentWorkflowService {
             logger.info('Payment already marked as PAID, skipping duplicate processing', { orderId, paymentId, leadId });
             return { transitioned: false };
           }
-          if (payment.status === 'REFUNDED' || payment.status === 'FAILED') {
+          // FAILED -> PAID is allowed: a customer can retry inside the same Razorpay order after a
+          // failed attempt (payment.failed webhook marks FAILED), and the later capture must win.
+          if (payment.status === 'REFUNDED') {
             logger.error(`Invalid state transition: Cannot move payment from ${payment.status} to PAID`, { orderId, paymentId });
             return { transitioned: false };
           }
@@ -146,6 +148,26 @@ export class EnrollmentWorkflowService {
       }
     }
     return { transitioned: false };
+  }
+
+  /**
+   * markPaid(order): single idempotent entry point used by both /api/verify-payment and the
+   * webhook. Only the first caller performs the PENDING -> PAID transition; every caller gets
+   * back the order row so it can mint its own join token.
+   */
+  async markPaid(
+    orderId: string,
+    paymentId: string,
+    paidAt: Date = new Date()
+  ): Promise<{ transitioned: boolean; paymentRowId: string | null; isPaid: boolean }> {
+    const { transitioned } = await this.handlePaymentSuccess(orderId, paymentId, paidAt);
+    const res = await query(`SELECT id, status FROM payments WHERE razorpay_order_id = $1`, [orderId]);
+    const row = res.rows[0];
+    return {
+      transitioned,
+      paymentRowId: row?.id ?? null,
+      isPaid: row?.status === 'PAID',
+    };
   }
 
   async enqueueClassroomInvite(lead: LeadRecord, orderId?: string): Promise<void> {

@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { Loader2, ShieldCheck, AlertCircle, CheckCircle } from "lucide-react";
-import { loadRazorpayScript } from "@/lib/razorpay";
 
 declare global {
   interface Window {
@@ -34,7 +33,7 @@ export interface RazorpayCheckoutButtonProps {
 }
 
 export default function RazorpayCheckoutButton({
-  amount = 100, // 1 INR in paise (test mode; display remains 3,499)
+  amount = 349900, // 3,499 INR in paise
   currency = "INR",
   name = "Super Profit",
   description = "UGC Masterclass + 5 Bonuses",
@@ -53,6 +52,21 @@ export default function RazorpayCheckoutButton({
 
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+
+  // Ensure Razorpay checkout script is loaded
+  const loadRazorpayScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (typeof window !== "undefined" && window.Razorpay) {
+        return resolve(true);
+      }
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
 
   const handlePayment = async () => {
     if (loading) return;
@@ -153,18 +167,19 @@ export default function RazorpayCheckoutButton({
             if (!verifyRes.ok || !verifyData.verified) {
               throw new Error(
                 verifyData.message ||
-                  verifyData.error ||
-                  "Payment signature verification failed"
+                verifyData.error ||
+                "Payment signature verification failed"
               );
             }
 
-            const directClassroom =
-              verifyData.classroomUrl ||
-              "https://classroom.google.com/c/ODkxODYwMDQwMzQw?cjc=435t7z2a";
+            if (verifyData.joinUrl) {
+              window.location.href = verifyData.joinUrl;
+              return;
+            }
+
             setStatusType("success");
-            setStatusMessage("Payment verified! Opening Google Classroom...");
+            setStatusMessage("Payment verified successfully!");
             onSuccess?.(response);
-            window.location.href = directClassroom;
           } catch (verifyErr: any) {
             const errMsg =
               verifyErr.message || "Payment signature verification failed.";
@@ -226,13 +241,12 @@ export default function RazorpayCheckoutButton({
 
       {statusMessage && (
         <div
-          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md ${
-            statusType === "success"
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md ${statusType === "success"
               ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
               : statusType === "error"
-              ? "bg-rose-50 text-rose-800 border border-rose-200"
-              : "bg-amber-50 text-amber-800 border border-amber-200"
-          }`}
+                ? "bg-rose-50 text-rose-800 border border-rose-200"
+                : "bg-amber-50 text-amber-800 border border-amber-200"
+            }`}
         >
           {statusType === "success" ? (
             <CheckCircle className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />

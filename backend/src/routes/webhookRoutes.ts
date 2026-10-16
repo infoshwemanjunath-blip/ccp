@@ -9,10 +9,11 @@ export const webhookRouter = Router();
  * Authoritative payment event listener with HMAC signature verification & idempotency
  */
 webhookRouter.post('/razorpay', async (req: Request, res: Response) => {
+  logger.info('Webhook received');
   const signature = req.headers['x-razorpay-signature'] as string;
 
   if (!signature) {
-    logger.warn('Webhook request missing x-razorpay-signature header');
+    logger.warn('Webhook signature failed: missing header');
     return res.status(400).json({ error: 'Missing webhook signature header' });
   }
 

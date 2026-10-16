@@ -29,3 +29,54 @@ export const verifyLimiter = rateLimit({
     error: 'Too many verification attempts, please try again shortly',
   },
 });
+
+export const joinCheckLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many status check requests, please try again shortly',
+  },
+});
+
+export const joinVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many verification attempts, please try again shortly',
+  },
+});
+
+export const joinStatusLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many status check requests, please try again shortly',
+  },
+});
+
+export const joinOpenedLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many classroom opened events, please try again shortly',
+  },
+});
+
+export const joinConfirmLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many confirmation attempts, please try again shortly',
+  },
+});
+

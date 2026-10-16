@@ -6,6 +6,7 @@ export interface SendClassroomEmailOptions {
   toEmail: string;
   fullName?: string;
   courseId: string;
+  joinUrl?: string;
 }
 
 export class EmailService {
@@ -36,7 +37,8 @@ export class EmailService {
    */
   async sendClassroomAccessEmail(options: SendClassroomEmailOptions): Promise<boolean> {
     const { toEmail, fullName, courseId } = options;
-    const directClassroomUrl = `https://classroom.google.com/c/${courseId}`;
+    const code = env.GOOGLE_CLASSROOM_ENROLLMENT_CODE || 'u5d3zmob';
+    const directClassroomUrl = options.joinUrl || env.GCR_LINK || `https://classroom.google.com/c/${courseId}?cjc=${code}`;
 
     logger.info('Preparing classroom access email', { email: toEmail });
 
