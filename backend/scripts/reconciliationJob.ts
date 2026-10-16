@@ -24,7 +24,7 @@ async function runReconciliation() {
         await query(
           `INSERT INTO outbox_jobs (payment_id, job_type, payload, status)
            VALUES ($1, 'CLASSROOM_INVITE', $2, 'PENDING')
-           ON CONFLICT (payment_id, job_type) DO NOTHING`,
+           ON CONFLICT (payment_id, job_type) DO UPDATE SET status = 'PENDING', attempts = 0, next_run_at = NOW()`,
           [
             row.payment_id,
             JSON.stringify({
