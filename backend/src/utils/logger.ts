@@ -8,7 +8,7 @@ export interface LogMeta {
   [key: string]: any;
 }
 
-function maskEmail(email?: string): string {
+export function maskEmail(email?: string): string {
   if (!email) return '';
   const [user, domain] = email.split('@');
   if (!domain) return '***';

@@ -1,6 +1,6 @@
 import { query, withTransaction } from '../db/pool.js';
 import { LeadRecord, EnrollmentStatusResponse } from '../types/index.js';
-import { logger } from '../utils/logger.js';
+import { logger, maskEmail } from '../utils/logger.js';
 import { env } from '../config/env.js';
 
 export class LeadService {
@@ -98,8 +98,8 @@ export class LeadService {
       ) {
         return {
           status: 'INVITED',
-          message: `Invitation sent to ${row.email_normalized}. Open Classroom and click Accept.`,
-          email: row.email_normalized,
+          message: 'Invitation sent to your Google account. Open Classroom and click Accept.',
+          email: maskEmail(row.email_normalized),
           orderId,
         };
       }
@@ -108,7 +108,7 @@ export class LeadService {
         return {
           status: 'INVALID_GOOGLE_EMAIL',
           message: 'Payment received. The email provided is not a registered Google Account. Please provide your Google account email to receive your invitation.',
-          email: row.email_normalized,
+          email: maskEmail(row.email_normalized),
           orderId,
         };
       }
@@ -117,15 +117,15 @@ export class LeadService {
         return {
           status: 'ENROLLMENT_FAILED',
           message: 'Payment received. Automated invitation is being retried. Our support team will ensure your access.',
-          email: row.email_normalized,
+          email: maskEmail(row.email_normalized),
           orderId,
         };
       }
 
       return {
         status: 'ENROLLMENT_PENDING',
-        message: `Payment received. Sending invitation to ${row.email_normalized}...`,
-        email: row.email_normalized,
+        message: 'Payment received. Sending invitation to your Google account...',
+        email: maskEmail(row.email_normalized),
         orderId,
       };
     }
