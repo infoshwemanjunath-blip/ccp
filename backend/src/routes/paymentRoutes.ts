@@ -27,7 +27,7 @@ paymentRouter.post('/create-order', orderLimiter, async (req: Request, res: Resp
   try {
     const amount = env.COURSE_PRICE_PAISE;
 
-    const currency = (req.body.currency || 'INR').toUpperCase();
+    const currency = env.COURSE_CURRENCY || 'INR';
     const receipt = req.body.receipt || `rcpt_${Date.now()}`;
     const notes = req.body.notes;
 
