@@ -83,6 +83,12 @@ export class WhatsAppService {
     }
     if (!siteUrl) return this.finish(order, 'failed', 'SITE_URL not configured');
 
+    // Expire previous unverified tokens for this order to prevent accumulating active tokens
+    await query(
+      `UPDATE join_tokens SET expires_at = NOW() WHERE order_id = $1 AND source = 'whatsapp' AND expires_at > NOW()`,
+      [order.id]
+    ).catch(() => {});
+
     // Raw tokens can't be recovered from hashes, so every attempt mints a fresh token
     let rawToken = '';
     try {
