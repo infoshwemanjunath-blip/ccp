@@ -91,10 +91,6 @@ export class LeadService {
     }
 
     if (row.payment_status === 'PAID') {
-      const courseId = row.course_id || env.GOOGLE_CLASSROOM_COURSE_ID;
-      const code = env.GOOGLE_CLASSROOM_ENROLLMENT_CODE || 'u5d3zmob';
-      const directClassroomUrl = env.GCR_LINK || `https://classroom.google.com/c/${courseId}?cjc=${code}`;
-
       if (
         row.classroom_status === 'ENROLLED' ||
         row.enrollment_status === 'ENROLLED' ||
@@ -103,7 +99,6 @@ export class LeadService {
         return {
           status: 'INVITED',
           message: `Invitation sent to ${row.email_normalized}. Open Classroom and click Accept.`,
-          classroomUrl: directClassroomUrl,
           email: row.email_normalized,
           orderId,
         };
@@ -122,7 +117,6 @@ export class LeadService {
         return {
           status: 'ENROLLMENT_FAILED',
           message: 'Payment received. Automated invitation is being retried. Our support team will ensure your access.',
-          classroomUrl: directClassroomUrl,
           email: row.email_normalized,
           orderId,
         };
@@ -131,7 +125,6 @@ export class LeadService {
       return {
         status: 'ENROLLMENT_PENDING',
         message: `Payment received. Sending invitation to ${row.email_normalized}...`,
-        classroomUrl: directClassroomUrl,
         email: row.email_normalized,
         orderId,
       };
