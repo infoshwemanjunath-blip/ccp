@@ -33,7 +33,7 @@ export interface RazorpayCheckoutButtonProps {
 }
 
 export default function RazorpayCheckoutButton({
-  amount = 349900, // 3,499 INR in paise
+  amount = 100, // 1 INR in paise
   currency = "INR",
   name = "Super Profit",
   description = "UGC Masterclass + 5 Bonuses",

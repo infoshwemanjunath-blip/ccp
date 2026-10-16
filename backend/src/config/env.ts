@@ -18,7 +18,7 @@ const envSchema = z.object({
   RAZORPAY_KEY_ID: z.string().default(''),
   RAZORPAY_KEY_SECRET: z.string().default(''),
   RAZORPAY_WEBHOOK_SECRET: z.string().default(''),
-  COURSE_PRICE_PAISE: z.coerce.number().default(349900),
+  COURSE_PRICE_PAISE: z.coerce.number().default(100),
   COURSE_CURRENCY: z.string().default('INR'),
 
   // Google Classroom
