@@ -48,7 +48,6 @@ export class EmailService {
     if (!transporter) {
       logger.info('SMTP not configured - simulated email dispatch', {
         email: toEmail,
-        directUrl: directClassroomUrl,
       });
       return true;
     }
