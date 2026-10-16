@@ -43,8 +43,10 @@ paymentRouter.post('/create-order', orderLimiter, async (req: Request, res: Resp
     const customerPhone = rawCustomerPhone ? toIndianMobile91(rawCustomerPhone) || rawCustomerPhone : null;
     if (customerEmail) {
       try {
+        const rawName = notes?.name || req.body?.name || 'Student';
+        const cleanName = typeof rawName === 'string' ? rawName.replace(/[<>{}\/\\]/g, '').trim().slice(0, 100) || 'Student' : 'Student';
         const leadRes = await leadService.findOrCreateLead(
-          notes?.name || req.body?.name || 'Student',
+          cleanName,
           customerPhone || '',
           customerEmail,
           customerEmail.toLowerCase().trim()

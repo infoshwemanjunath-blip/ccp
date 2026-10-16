@@ -9,6 +9,15 @@ export interface SendClassroomEmailOptions {
   joinUrl?: string;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export class EmailService {
   private transporter: Transporter | null = null;
 
@@ -36,6 +45,7 @@ export class EmailService {
    * Send direct classroom invite link to the student email
    */
   async sendClassroomAccessEmail(options: SendClassroomEmailOptions): Promise<boolean> {
+    const { toEmail, fullName, courseId } = options;
     const code = env.GOOGLE_CLASSROOM_ENROLLMENT_CODE;
     const directClassroomUrl = options.joinUrl || env.GCR_LINK || (code ? `https://classroom.google.com/c/${courseId}?cjc=${code}` : '');
     if (!directClassroomUrl) {
@@ -53,6 +63,7 @@ export class EmailService {
     }
 
     const recipientName = fullName ? fullName.trim() : 'Student';
+    const safeRecipientName = escapeHtml(recipientName);
 
     const mailOptions = {
       from: env.EMAIL_FROM,
@@ -85,7 +96,7 @@ Super Profit Team`,
     <p style="color: #78716c; margin-top: 4px; font-size: 14px;">Official Enrollment Confirmation</p>
   </div>
   <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e7e5e4; line-height: 1.6;">
-    <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Welcome, ${recipientName}!</h2>
+    <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Welcome, ${safeRecipientName}!</h2>
     <p>Your payment has been verified, and your invitation has been sent to <strong style="color: #064e3b;">${toEmail}</strong>.</p>
     <div style="background: #ecfdf5; border-left: 4px solid #059669; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
       <p style="margin: 0; font-size: 14px; font-weight: 600; color: #064e3b;">
