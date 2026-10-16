@@ -90,7 +90,13 @@ export class WebhookService {
               logger.error('Webhook amount mismatch', { orderId, expectedAmount, actualAmount: orderEntity.amount });
               throw new Error('Amount mismatch');
             }
-            await enrollmentWorkflowService.handlePaymentSuccess(orderId, paymentId, paidAt);
+            await enrollmentWorkflowService.handlePaymentSuccess(
+              orderId,
+              paymentId,
+              paidAt,
+              paymentEntity?.email || orderEntity?.notes?.email,
+              paymentEntity?.notes?.name || orderEntity?.notes?.name
+            );
           }
           break;
         }

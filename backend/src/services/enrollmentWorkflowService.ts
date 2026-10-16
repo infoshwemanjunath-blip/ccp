@@ -32,12 +32,34 @@ export class EnrollmentWorkflowService {
             [orderId]
           );
 
-          if (lookupRes.rows.length === 0) {
-            throw new Error(`Payment record not found for order: ${orderId}`);
-          }
+          let internalPaymentId: string;
+          let leadId: string;
 
-          const internalPaymentId = lookupRes.rows[0].id;
-          const leadId = lookupRes.rows[0].lead_id;
+          if (lookupRes.rows.length === 0) {
+            logger.warn('Payment record missing on webhook success, auto-recovering record', { orderId, paymentId });
+            const safeEmail = (fallbackEmail || `customer_${Date.now()}@example.com`).trim().toLowerCase();
+            const safeName = (fallbackName || 'Student').trim();
+
+            const newLeadRes = await client.query(
+              `INSERT INTO leads (full_name, phone, email, email_normalized, payment_status, enrollment_status)
+               VALUES ($1, '', $2, $3, 'PENDING', 'PENDING')
+               RETURNING id`,
+              [safeName, safeEmail, safeEmail]
+            );
+            leadId = newLeadRes.rows[0].id;
+
+            const newPaymentRes = await client.query(
+              `INSERT INTO payments (lead_id, razorpay_order_id, razorpay_payment_id, amount, currency, status)
+               VALUES ($1, $2, $3, $4, $5, 'PENDING')
+               ON CONFLICT (razorpay_order_id) DO UPDATE SET razorpay_payment_id = EXCLUDED.razorpay_payment_id
+               RETURNING id, lead_id`,
+              [leadId, orderId, paymentId, env.COURSE_PRICE_PAISE, env.COURSE_CURRENCY]
+            );
+            internalPaymentId = newPaymentRes.rows[0].id;
+          } else {
+            internalPaymentId = lookupRes.rows[0].id;
+            leadId = lookupRes.rows[0].lead_id;
+          }
 
           // 2. Lock leads
           const leadRes = await client.query<LeadRecord>(
