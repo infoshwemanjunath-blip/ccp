@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { verifyPaymentSchema } from '../utils/validation.js';
+import { verifyPaymentSchema, toIndianMobile91 } from '../utils/validation.js';
 import { razorpayService } from '../services/razorpayService.js';
 import { enrollmentWorkflowService } from '../services/enrollmentWorkflowService.js';
 import { leadService } from '../services/leadService.js';
@@ -39,19 +39,21 @@ paymentRouter.post('/create-order', orderLimiter, async (req: Request, res: Resp
     });
 
     const customerEmail = notes?.email || req.body?.email;
+    const rawCustomerPhone = req.body?.phone || notes?.phone;
+    const customerPhone = rawCustomerPhone ? toIndianMobile91(rawCustomerPhone) || rawCustomerPhone : null;
     if (customerEmail) {
       try {
         const leadRes = await leadService.findOrCreateLead(
           notes?.name || req.body?.name || 'Student',
-          notes?.phone || req.body?.phone || '',
+          customerPhone || '',
           customerEmail,
           customerEmail.toLowerCase().trim()
         );
         await query(
-          `INSERT INTO payments (lead_id, razorpay_order_id, amount, currency, status)
-           VALUES ($1, $2, $3, $4, 'PENDING')
+          `INSERT INTO payments (lead_id, razorpay_order_id, amount, currency, status, customer_phone)
+           VALUES ($1, $2, $3, $4, 'PENDING', $5)
            ON CONFLICT (razorpay_order_id) DO NOTHING`,
-          [leadRes.lead.id, order.id, amount, currency]
+          [leadRes.lead.id, order.id, amount, currency, customerPhone]
         );
       } catch (dbErr) {
         logger.warn('Could not persist payment record in standard create-order route', {
