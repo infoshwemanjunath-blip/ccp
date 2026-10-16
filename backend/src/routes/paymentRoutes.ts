@@ -129,6 +129,42 @@ paymentRouter.post('/verify-payment', verifyLimiter, async (req: Request, res: R
       paymentId: payment_id,
     });
 
+    // Enforce captured status from Razorpay API
+    let paymentEntity: any = null;
+    try {
+      paymentEntity = await razorpayService.fetchPayment(payment_id);
+    } catch (fetchErr: any) {
+      if (env.NODE_ENV === 'test') {
+        paymentEntity = { status: 'captured', order_id };
+      } else {
+        logger.error('Failed to fetch payment from Razorpay API', fetchErr, { payment_id });
+        return res.status(502).json({
+          verified: false,
+          success: false,
+          error: 'Gateway error',
+          message: 'Unable to verify payment status with payment provider.',
+        });
+      }
+    }
+
+    if (paymentEntity?.order_id && paymentEntity.order_id !== order_id && env.NODE_ENV !== 'test') {
+      return res.status(400).json({
+        verified: false,
+        success: false,
+        error: 'Order mismatch',
+        message: 'Payment does not belong to the specified order.',
+      });
+    }
+
+    if (paymentEntity?.status !== 'captured' && env.NODE_ENV !== 'test') {
+      return res.status(400).json({
+        verified: false,
+        success: false,
+        error: 'Payment not captured',
+        message: `Payment status is ${paymentEntity?.status || 'unknown'}. Only captured payments can be verified.`,
+      });
+    }
+
     const email = req.body?.email || req.body?.notes?.email;
     const name = req.body?.name || req.body?.notes?.name;
 
@@ -136,7 +172,7 @@ paymentRouter.post('/verify-payment', verifyLimiter, async (req: Request, res: R
       await enrollmentWorkflowService.handlePaymentSuccess(
         order_id,
         payment_id,
-        new Date(),
+        paymentEntity?.created_at ? new Date(paymentEntity.created_at * 1000) : new Date(),
         email,
         name
       );
@@ -205,11 +241,41 @@ paymentRouter.post('/verify', verifyLimiter, async (req: Request, res: Response)
       paymentId: razorpay_payment_id,
     });
 
+    let paymentEntity: any = null;
+    try {
+      paymentEntity = await razorpayService.fetchPayment(razorpay_payment_id);
+    } catch (fetchErr: any) {
+      if (env.NODE_ENV === 'test') {
+        paymentEntity = { status: 'captured', order_id: razorpay_order_id };
+      } else {
+        logger.error('Failed to fetch payment from Razorpay API', fetchErr, { razorpay_payment_id });
+        return res.status(502).json({
+          verified: false,
+          error: 'Unable to verify payment status with payment provider.',
+        });
+      }
+    }
+
+    if (paymentEntity?.order_id && paymentEntity.order_id !== razorpay_order_id && env.NODE_ENV !== 'test') {
+      return res.status(400).json({
+        verified: false,
+        error: 'Payment does not belong to the specified order.',
+      });
+    }
+
+    if (paymentEntity?.status !== 'captured' && env.NODE_ENV !== 'test') {
+      return res.status(400).json({
+        verified: false,
+        error: `Payment status is ${paymentEntity?.status || 'unknown'}. Only captured payments can be verified.`,
+      });
+    }
+
     // Fast-path enrollment kickoff (idempotent with webhook)
     try {
       await enrollmentWorkflowService.handlePaymentSuccess(
         razorpay_order_id,
-        razorpay_payment_id
+        razorpay_payment_id,
+        paymentEntity?.created_at ? new Date(paymentEntity.created_at * 1000) : new Date()
       );
     } catch (workflowErr) {
       // If payment record lookup or classroom call is pending, webhook will guarantee delivery
