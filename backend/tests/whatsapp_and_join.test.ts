@@ -298,6 +298,68 @@ describe('WhatsApp and Join Flow Tests', () => {
       expect(res.body.gcrLink).toBe('https://classroom.google.com/c/secret_course_abc');
       expect(res.body.sessionToken).toBeDefined();
     });
+
+    it('rejects with 403 when order is locked', async () => {
+      const rawToken = 'valid_token_locked_12345678901234';
+      const hash = hashToken(rawToken);
+
+      // 1. findToken query
+      vi.spyOn(poolModule, 'query').mockResolvedValueOnce({
+        rows: [
+          {
+            token_hash: hash,
+            expires_at: new Date(Date.now() + 86400000),
+            order_id: 'order-uuid-locked',
+            razorpay_order_id: 'order_rzp_locked',
+            status: 'PAID',
+            join_locked_until: new Date(Date.now() + 3600000),
+            join_reveal_count: 0,
+          },
+        ],
+        rowCount: 1,
+        command: '',
+        oid: 0,
+        fields: [],
+      });
+
+      // 2. withTransaction query
+      vi.spyOn(poolModule, 'withTransaction').mockImplementationOnce(async (cb: any) => {
+        const mockClient = {
+          query: vi.fn().mockImplementation((sql: string) => {
+            if (sql.includes('FOR UPDATE')) {
+              return Promise.resolve({
+                rows: [
+                  {
+                    id: 'order-uuid-locked',
+                    razorpay_order_id: 'order_rzp_locked',
+                    status: 'PAID',
+                    customer_phone: '919876543210',
+                    join_failed_attempts: 0,
+                    join_locked_until: new Date(Date.now() + 3600000),
+                    join_reveal_count: 0,
+                  },
+                ],
+              });
+            }
+            return Promise.resolve({ rows: [] });
+          }),
+        };
+        return cb(mockClient);
+      });
+
+      const res = await request(app)
+        .post('/join/verify')
+        .send({
+          token: rawToken,
+          name: 'Jane Doe',
+          email: 'jane@example.com',
+          phone: '+91 98765-43210',
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.locked).toBe(true);
+    });
   });
 
   describe('API: Join Session Endpoints (/join/status, /join/opened, /join/confirm)', () => {
