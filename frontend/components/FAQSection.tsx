@@ -228,7 +228,7 @@ export default function FAQSection() {
           </div>
 
           <a
-            href="https://wa.me/917676200810"
+            href="https://wa.me/919380352976"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-base transition-all hover:scale-105 shrink-0 shadow-lg shadow-[#25D366]/30 active:scale-95"
